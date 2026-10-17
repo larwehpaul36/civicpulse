@@ -23,10 +23,10 @@ test('an empty form cannot be sent (the browser blocks it)', async ({ page }) =>
 for (const [path, name] of [['/issues', 'Reports'], ['/tracker', 'Tracker'], ['/directory', 'Directory'], ['/my', 'My reports']]) {
   test(`nav reaches ${path}`, async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name }).click();
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${path}$`));
     await expect(page.locator('.page-title').first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('link', { name }).first()).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name, exact: true })).toHaveAttribute('aria-current', 'page');
   });
 }
 
