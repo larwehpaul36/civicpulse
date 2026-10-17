@@ -1,0 +1,30 @@
+{
+  "name": "civicpulse",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "node --test tests/*.test.mjs",
+    "dev:https": "next dev --experimental-https",
+    "check:live": "node --env-file=.env.local scripts/check-live.mjs",
+    "playwright:install": "playwright install chromium",
+    "test:e2e": "playwright test",
+    "test:e2e:live": "playwright test -c playwright.live.config.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "leaflet": "^1.9.4",
+    "next": "^16.4.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "engines": {
+    "node": ">=20.9"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.5",
+    "@playwright/test": "^1.50.0"
+  }
+}

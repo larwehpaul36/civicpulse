@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+.env*
+!.env.local.example
+.vercel
+test-results
+playwright-report
+*.log
+.DS_Store
