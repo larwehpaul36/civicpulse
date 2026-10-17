@@ -10,10 +10,14 @@ test('home shows hero, steps and the report form', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Send report' })).toBeVisible();
 });
 
-test('submitting an empty form explains what is missing', async ({ page }) => {
+test('an empty form cannot be sent (the browser blocks it)', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Send report' }).click();
-  await expect(page.locator('.error')).toContainText('Choose a problem');
+  // The fields are `required`, so the browser stops the submit before the app's own message appears.
+  const valid = await page.getByLabel('What is the problem?').evaluate((el) => el.validity.valid);
+  expect(valid).toBe(false);
+  await expect(page.locator('.error')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/$/);
 });
 
 for (const [path, name] of [['/issues', 'Reports'], ['/tracker', 'Tracker'], ['/directory', 'Directory'], ['/my', 'My reports']]) {
