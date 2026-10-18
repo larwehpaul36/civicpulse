@@ -109,7 +109,7 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
         </summary>
 
         <div className="admin-body">
-          <p>{i.description || '—'}</p>
+          {i.description && <p>{i.description}</p>}
           <div className="photos">
             {i.before_path && <img src={photoUrl(i.before_path)} alt="" />}
             {i.after_path && <img src={photoUrl(i.after_path)} alt="" />}

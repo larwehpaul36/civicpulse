@@ -6,18 +6,15 @@ test('home shows hero, steps and the report form', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Your street');
   await expect(page.locator('.how .steps li')).toHaveCount(3);
   await expect(page.getByLabel('What is the problem?')).toBeVisible();
-  await expect(page.getByLabel('Where is it?')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Send report' })).toBeVisible();
+  await expect(page.getByText('Step 1 of 3')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeVisible();
 });
 
-test('an empty form cannot be sent (the browser blocks it)', async ({ page }) => {
+test('step 1 explains what is missing and does not move on', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Send report' }).click();
-  // The fields are `required`, so the browser stops the submit before the app's own message appears.
-  const valid = await page.getByLabel('What is the problem?').evaluate((el) => el.validity.valid);
-  expect(valid).toBe(false);
-  await expect(page.locator('.error')).toHaveCount(0);
-  await expect(page).toHaveURL(/\/$/);
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.locator('.error')).toContainText('Choose the problem');
+  await expect(page.getByText('Step 1 of 3')).toBeVisible();
 });
 
 for (const [path, name] of [['/issues', 'Reports'], ['/tracker', 'Tracker'], ['/directory', 'Directory'], ['/my', 'My reports']]) {

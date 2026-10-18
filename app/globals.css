@@ -202,13 +202,40 @@ a, button, select, summary { touch-action:manipulation; }
 body { min-height:100dvh; }
 .mapcard { max-height:min(32rem,70dvh); }
 
+/* ---- 3-step report flow and success screen ---- */
+.stepper { display:grid; grid-template-columns:repeat(3,1fr); gap:.4rem; list-style:none; padding:0; margin:.2rem 0 0; }
+.stepper li { height:6px; border-radius:99px; background:var(--line); position:relative; overflow:hidden; }
+.stepper li::after { content:""; position:absolute; inset:0; background:var(--signal); transform:scaleX(0); transform-origin:left; transition:transform .5s var(--ease); }
+.stepper li.on::after { transform:scaleX(1); }
+.stepcount { margin:-.4rem 0 0; font-weight:700; color:var(--muted); font-size:.9rem; }
+.stepbody { display:grid; gap:1.1rem; animation:rise .45s var(--ease) both; }
+.stepbody[hidden] { display:none; }
+.steprow { display:flex; gap:.7rem; } .steprow button { margin:0; } .steprow button:last-child { flex:1; }
+.review { display:grid; grid-template-columns:auto 1fr; gap:.5rem 1rem; margin:0; padding:1rem; border:1px solid var(--line); border-radius:var(--radius); background:var(--paper); }
+.review dt { font-weight:800; } .review dd { margin:0; }
+.thumb { width:72px; height:72px; object-fit:cover; border-radius:12px; border:2px solid var(--line); }
+.done { justify-items:center; text-align:center; position:relative; }
+.tick { position:relative; width:84px; height:84px; }
+.tick svg { width:84px; height:84px; fill:none; stroke:#1f8a57; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
+.tick circle { stroke-dasharray:151; stroke-dashoffset:151; animation:draw2 .6s .1s var(--ease) forwards; }
+.tick path { stroke-dasharray:40; stroke-dashoffset:40; animation:draw2 .4s .6s var(--ease) forwards; }
+.done-bad .tick { display:none; }
+.confetti { position:absolute; left:50%; top:50%; width:0; height:0; }
+.confetti i { position:absolute; width:8px; height:14px; border-radius:2px; background:var(--c,#f2b705); opacity:0;
+  animation:burst 1.2s .7s var(--ease) both; }
+.confetti i:nth-child(4n+2) { --c:#1f8a57; } .confetti i:nth-child(4n+3) { --c:#c8382b; } .confetti i:nth-child(4n) { --c:var(--ink); }
+@keyframes draw2 { to { stroke-dashoffset:0; } }
+@keyframes burst { 0% { opacity:1; transform:rotate(calc(var(--i) * 22.5deg)) translateY(-20px); }
+  100% { opacity:0; transform:rotate(calc(var(--i) * 22.5deg)) translateY(-130px) rotate(260deg); } }
+
 /* ---- reduced motion: keep gentle fades and colour changes, drop movement ---- */
 @keyframes fade { from{opacity:0} to{opacity:1} }
 @media (prefers-reduced-motion:reduce) {
   html { scroll-behavior:auto; }
   .reveal, .scroll-reveal, .cards li, .page-title { animation:fade .4s both; }
   .pulse, .pulse i, .badge, .mapnote, .nav a.fab, .hx-live i, .map { animation:none; }
-  .rip { display:none; }
+  .rip, .confetti { display:none; }
+  .tick circle, .tick path { animation:none; stroke-dashoffset:0; }
   .road { animation:none; stroke-dashoffset:0; }
   .cta, button, .cards a, .nav a { transition:background-color .2s, color .2s, border-color .2s, box-shadow .2s; }
   .cta:hover, button:hover:not(:disabled), .cards a:hover { transform:none; }

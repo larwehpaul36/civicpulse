@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { newId } from '@/lib/newId';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -38,6 +38,9 @@ export default function ReportForm() {
   const [photo, setPhoto] = useState(null);
   const [loc, setLoc] = useState(null);
   const [status, setStatus] = useState('idle'); // idle | checking | saving | done
+  const [step, setStep] = useState(0); // 0 problem, 1 place, 2 review
+  const formRef = useRef(null);
+  const moved = useRef(false);
   const [error, setError] = useState('');
   const [detail, setDetail] = useState('');
   const [dupes, setDupes] = useState([]);
@@ -122,8 +125,23 @@ export default function ReportForm() {
   }
 
   function reset() {
-    setF(EMPTY); setPhoto(null); setLoc(null); setDupes([]); setConfirmedIds([]); setSavedId(null); setStatus('idle');
+    setF(EMPTY); setPhoto(null); setLoc(null); setDupes([]); setConfirmedIds([]); setSavedId(null); setStatus('idle'); setStep(0);
+    setError(''); setDetail('');
   }
+
+  // Keep the card in view when the step changes (but not on first load).
+  useEffect(() => {
+    if (!moved.current) { moved.current = true; return; }
+    formRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [step]);
+
+  function next() {
+    setError(''); setDetail('');
+    if (step === 0 && (!f.categoryId || !photo)) return setError(s.flow.miss0);
+    if (step === 1 && (!f.regionId || !loc)) return setError(s.flow.miss1);
+    setStep((n) => Math.min(2, n + 1));
+  }
+  function back() { setError(''); setDetail(''); setStep((n) => Math.max(0, n - 1)); }
 
   if (status === 'done') {
     const sent = syncer.hasSent(savedId);
@@ -131,7 +149,11 @@ export default function ReportForm() {
     const title = sent ? s.sentTitle : failed ? s.outbox.failedTitle : running ? s.outbox.sendingTitle : s.outbox.savedTitle;
     const body = sent ? s.sentBody : failed ? s.outbox.failedBody : s.outbox.savedBody;
     return (
-      <section className="panel" aria-live="polite">
+      <section className={`panel done${failed ? ' done-bad' : ''}`} aria-live="polite">
+        <div className="tick" aria-hidden="true">
+          <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M14 27l8 8 16-17" /></svg>
+          <div className="confetti">{Array.from({ length: 16 }, (_, k) => <i key={k} style={{ '--i': k }} />)}</div>
+        </div>
         <h2>{title}</h2>
         <p>{body}</p>
         <p><Link href="/my">{s.mine.getUpdates}</Link></p>
@@ -164,52 +186,66 @@ export default function ReportForm() {
     );
 
   const busy = status !== 'idle';
+  const cat = categories.find((c) => c.id === f.categoryId);
+  const regionText = regionOptions.find((r) => r.id === f.regionId)?.text;
 
   return (
-    <form className="panel" onSubmit={(e) => { e.preventDefault(); submit(false); }}>
-      <label>{s.category}
-        <select value={f.categoryId} onChange={set('categoryId')} required>
-          <option value="">{s.choose}</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {label(c.category_groups?.name)}: {label(c.name)}
-            </option>
-          ))}
-        </select>
-      </label>
+    <form ref={formRef} className="panel" onSubmit={(e) => { e.preventDefault(); if (step < 2) next(); else submit(false); }}>
+      <ol className="stepper" aria-hidden="true">{[0, 1, 2].map((n) => <li key={n} className={n <= step ? 'on' : ''} />)}</ol>
+      <p className="stepcount" aria-live="polite">{s.flow.of(step + 1)} · {s.flow.names[step]}</p>
 
-      <label>{s.region}
-        <select value={f.regionId} onChange={set('regionId')} required>
-          <option value="">{s.choose}</option>
-          {regionOptions.map((r) => <option key={r.id} value={r.id}>{r.text}</option>)}
-        </select>
-      </label>
-
-      <label>{s.severity}
-        <select value={f.severity} onChange={set('severity')}>
-          {Object.entries(s.severityOptions).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-      </label>
-
-      <label>{s.photo}
-        <input type="file" accept="image/*" capture="environment" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} required />
-        <span className="hint">{s.photoHelp}</span>
-      </label>
-      {preview && <img className="preview" src={preview} alt="" />}
-
-      <div className="field">
-        <span className="label">{s.location}</span>
-        <LocationPicker value={loc} onChange={setLoc} />
+      <div className="stepbody" hidden={step !== 0}>
+        <label>{s.category}
+          <select value={f.categoryId} onChange={set('categoryId')} aria-required="true">
+            <option value="">{s.choose}</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{label(c.category_groups?.name)}: {label(c.name)}</option>
+            ))}
+          </select>
+        </label>
+        <label>{s.severity}
+          <select value={f.severity} onChange={set('severity')}>
+            {Object.entries(s.severityOptions).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </label>
+        <label>{s.photo}
+          <input type="file" accept="image/*" capture="environment" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} aria-required="true" />
+          <span className="hint">{s.photoHelp}</span>
+        </label>
+        {preview && <img className="preview" src={preview} alt="" />}
       </div>
 
-      <label>{s.description}
-        <textarea rows={3} value={f.description} onChange={set('description')} maxLength={500} />
-      </label>
+      <div className="stepbody" hidden={step !== 1}>
+        <label>{s.region}
+          <select value={f.regionId} onChange={set('regionId')} aria-required="true">
+            <option value="">{s.choose}</option>
+            {regionOptions.map((r) => <option key={r.id} value={r.id}>{r.text}</option>)}
+          </select>
+        </label>
+        <div className="field">
+          <span className="label">{s.location}</span>
+          {step === 1 && <LocationPicker value={loc} onChange={setLoc} />}
+        </div>
+      </div>
+
+      <div className="stepbody" hidden={step !== 2}>
+        <label>{s.description}
+          <textarea rows={3} value={f.description} onChange={set('description')} maxLength={500} />
+        </label>
+        <dl className="review">
+          <dt>{s.flow.rProblem}</dt><dd>{cat ? `${label(cat.name)}` : '—'} · {s.severityOptions[f.severity]}</dd>
+          <dt>{s.flow.rPlace}</dt><dd>{regionText || '—'}{loc ? ` · ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}` : ''}</dd>
+          <dt>{s.flow.rPhoto}</dt><dd>{preview ? <img className="thumb" src={preview} alt="" /> : '—'}</dd>
+        </dl>
+      </div>
 
       {error && <p className="error" role="alert">{error}{detail && <small className="hint"> ({detail})</small>}</p>}
-      <button type="submit" disabled={busy}>
-        {status === 'checking' ? s.checking : status === 'saving' ? s.saving : s.submit}
-      </button>
+      <div className="steprow">
+        {step > 0 && <button type="button" className="secondary" onClick={back} disabled={busy}>{s.flow.back}</button>}
+        <button type="submit" disabled={busy}>
+          {step < 2 ? s.flow.next : status === 'checking' ? s.checking : status === 'saving' ? s.saving : s.submit}
+        </button>
+      </div>
     </form>
   );
 }
