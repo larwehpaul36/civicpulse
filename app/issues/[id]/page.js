@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { supabase, ensureUser } from '@/lib/supabase';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
+import ShareButton from '@/components/ShareButton';
 
 const photoUrl = (path) => supabase.storage.from('issue-photos').getPublicUrl(path).data.publicUrl;
 const dateText = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -90,6 +91,7 @@ export default function IssuePage() {
       <p className="hint">{s.daysOpen(issue.days_open)} · {s.confirmations(issue.confirmation_count)}</p>
       <p><strong>{s.responsibleParty}:</strong> {party?.name ?? s.notAssigned}</p>
       {waiting !== null && <p className="warn">{s.sentAgo(waiting)}</p>}
+      <ShareButton title={label(cat?.name)} text={s.share.line(label(cat?.name), issue.status, issue.days_open)} />
 
       <div className="photos">
         <figure>

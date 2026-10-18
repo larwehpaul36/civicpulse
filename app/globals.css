@@ -202,6 +202,8 @@ a, button, select, summary { touch-action:manipulation; }
 body { min-height:100dvh; }
 .mapcard { max-height:min(32rem,70dvh); }
 
+.sharerow { display:flex; flex-wrap:wrap; align-items:center; gap:.7rem; margin:1rem 0; } .sharerow .cta, .sharerow button { margin:0; }
+
 /* ---- 3-step report flow and success screen ---- */
 .stepper { display:grid; grid-template-columns:repeat(3,1fr); gap:.4rem; list-style:none; padding:0; margin:.2rem 0 0; }
 .stepper li { height:6px; border-radius:99px; background:var(--line); position:relative; overflow:hidden; }
