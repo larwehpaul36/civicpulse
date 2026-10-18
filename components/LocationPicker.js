@@ -13,6 +13,7 @@ export default function LocationPicker({ value, onChange }) {
   const onChangeRef = useRef(onChange);
   const [ready, setReady] = useState(false);
   const [msg, setMsg] = useState('');
+  const [noTiles, setNoTiles] = useState(false); // map pictures could not load (no signal)
   onChangeRef.current = onChange;
 
   useEffect(() => {
@@ -22,10 +23,12 @@ export default function LocationPicker({ value, onChange }) {
       const L = mod.default;
       Lref.current = L;
       map.current = L.map(el.current).setView(ACCRA, 13);
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '© OpenStreetMap contributors',
       }).addTo(map.current);
+      tiles.on('tileerror', () => setNoTiles(true));
+      tiles.on('tileload', () => setNoTiles(false));
       map.current.on('click', (e) => onChangeRef.current({ lat: e.latlng.lat, lng: e.latlng.lng }));
       setReady(true);
     });
@@ -64,6 +67,8 @@ export default function LocationPicker({ value, onChange }) {
       <button type="button" className="secondary" onClick={locate}>{s.useMyLocation}</button>
       <div ref={el} className="map" role="application" aria-label={s.location} />
       <p className="hint">{value ? s.locationSet : s.tapMap} {msg}</p>
+      {value && <p className="hint coords">{value.lat.toFixed(5)}, {value.lng.toFixed(5)}</p>}
+      {noTiles && <p className="hint">{s.mapOffline}</p>}
     </div>
   );
 }
