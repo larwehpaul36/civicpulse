@@ -17,20 +17,20 @@ Needs Node 20.9+ (Node 22 recommended).
 | Area | State |
 |---|---|
 | Features (reporting, offline queue, map, tracker, moderator desk, linking, notifications, directory) | Written. 46 unit checks pass. |
-| Frontend redesign (design system, dark mode, hero home page, floating mobile nav, motion) | Done. `next build` passes. Not yet seen by real users. |
+| Frontend v2 ("civic broadcast": live map and live numbers from `public_issues`, tricolor stripe, mobile tab bar with a center camera button, new palette on every page, dark mode, motion) | Done. Unit tests and `next build` pass. Not yet seen by real users. Design preview: Claude artifact canvas "CivicPulse: home concept". |
 | Phase 0 tooling (this folder): `npm run check:live`, Playwright tests, CI, `supabase/setup_all.sql` | Written and syntax-checked. **Playwright and check:live have not been run against a browser or a live project yet.** |
 | Live Supabase + Vercel deployment | **Not done. This is the next thing.** |
 | Everything after Phase 0 | See the roadmap below. |
 
 ### Phase 0 checklist: make it real (tick these)
-- [ ] 1. Create a Supabase project. SQL editor: paste and run `supabase/setup_all.sql` (same as running 001 to 008 in order).
-- [ ] 2. Authentication > Providers: enable **Anonymous sign-ins**. Authentication > URL Configuration: set Site URL, add `http://localhost:3000/admin` and your Vercel URL to the redirect list.
-- [ ] 3. Copy `.env.local.example` to `.env.local`, fill in the project URL and anon key.
-- [ ] 4. `npm install`, then `npm run check:live`. Fix every FAIL it prints (each line says which migration or setting to fix). **Do not skip the two PRIVACY lines.**
-- [ ] 5. `npm run dev`, open **http://localhost:3000** (see the warning below about IP addresses), sign in at `/admin`, then run the `insert into moderators` line from the bottom of `005_moderators.sql` with your email.
-- [ ] 6. Add the first real responsible party and a `category_responsibilities` row (dev helpers at the bottom of `004_region_matching_and_public_view.sql`, or use /admin > add party).
-- [ ] 7. Run the full loop by hand: report, confirm (from a second browser profile), assign party in /admin, mark sent, add after photo, mark resolved, check /tracker.
-- [ ] 8. Push to GitHub. CI (`.github/workflows/ci.yml`) runs unit tests, build, `npm audit` and the smoke tests.
+- [x] 1. Create a Supabase project. SQL editor: paste and run `supabase/setup_all.sql` (same as running 001 to 008 in order).
+- [x] 2. Authentication > Providers: enable **Anonymous sign-ins**. Authentication > URL Configuration: set Site URL, add `http://localhost:3000/admin` and your Vercel URL to the redirect list.
+- [x] 3. Copy `.env.local.example` to `.env.local`, fill in the project URL and anon key.
+- [x] 4. `npm install`, then `npm run check:live`. Fix every FAIL it prints (each line says which migration or setting to fix). **Do not skip the two PRIVACY lines.**
+- [x] 5. `npm run dev`, open **http://localhost:3000** (see the warning below about IP addresses), sign in at `/admin`, then run the `insert into moderators` line from the bottom of `005_moderators.sql` with your email.
+- [x] 6. Add the first real responsible party and a `category_responsibilities` row (dev helpers at the bottom of `004_region_matching_and_public_view.sql`, or use /admin > add party).
+- [x] 7. Run the full loop by hand: report, confirm (from a second browser profile), assign party in /admin, mark sent, add after photo, mark resolved, check /tracker.
+- [x] 8. Push to GitHub. CI (`.github/workflows/ci.yml`) runs unit tests, build, `npm audit` and the smoke tests.
 - [ ] 9. Deploy to Vercel (import the repo, add the same env vars, redeploy). Add the Vercel URL to Supabase's redirect list.
 - [ ] 10. `npm run playwright:install` once, then `npm run test:e2e` (smoke, no backend needed) and `npm run test:e2e:live` (files a real report; use a TEST Supabase project).
 - [ ] 11. On a real phone, over HTTPS: open the site online once, switch to airplane mode, make a report, switch signal back on, watch it send. Then test push notifications (add to Home Screen first on iPhone).

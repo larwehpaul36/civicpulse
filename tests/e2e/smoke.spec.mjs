@@ -3,8 +3,8 @@ import { test, expect } from '@playwright/test';
 
 test('home shows hero, steps and the report form', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Fix your street');
-  await expect(page.locator('.steps li')).toHaveCount(3);
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Your street');
+  await expect(page.locator('.how .steps li')).toHaveCount(3);
   await expect(page.getByLabel('What is the problem?')).toBeVisible();
   await expect(page.getByLabel('Where is it?')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Send report' })).toBeVisible();
