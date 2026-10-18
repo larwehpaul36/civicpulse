@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { newId } from '@/lib/newId';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { supabase, ensureUser } from '@/lib/supabase';
@@ -38,6 +39,7 @@ export default function ReportForm() {
   const [loc, setLoc] = useState(null);
   const [status, setStatus] = useState('idle'); // idle | checking | saving | done
   const [error, setError] = useState('');
+  const [detail, setDetail] = useState('');
   const [dupes, setDupes] = useState([]);
   const [confirmedIds, setConfirmedIds] = useState([]);
   const [savedId, setSavedId] = useState(null);
@@ -68,17 +70,24 @@ export default function ReportForm() {
   // Every report is saved on the phone first, then sent. A weak signal can no longer lose it.
   async function submit(skipDuplicateCheck = false) {
     setError('');
+    setDetail('');
     if (!f.categoryId || !f.regionId || !photo || !loc) return setError(s.missing);
+    let stage = 'start';
     try {
       if (!skipDuplicateCheck && navigator.onLine) {
         setStatus('checking');
-        const found = await findDuplicates(loc, f.categoryId);
+        stage = 'duplicates';
+        // A failed duplicate check must never stop someone from reporting.
+        const found = await findDuplicates(loc, f.categoryId).catch(() => []);
         if (found?.length) { setDupes(found); return setStatus('idle'); }
       }
 
       setStatus('saving');
-      const id = crypto.randomUUID();
+      stage = 'id';
+      const id = newId();
+      stage = 'photo';
       const blob = await compressImage(photo);
+      stage = 'save';
       await queue.enqueue({
         id,
         categoryId: f.categoryId,
@@ -93,7 +102,9 @@ export default function ReportForm() {
       syncer.syncAll({ ignoreBackoff: true }).catch(() => {});
     } catch (err) {
       console.error(err);
-      setError(s.saveFailed);
+      setError(stage === 'photo' ? s.photoFailed : stage === 'save' ? s.saveFailed : s.failed);
+      // Short technical note so a problem on one phone model can be traced.
+      setDetail(`${stage}: ${err?.name ?? 'Error'}${err?.message ? ` - ${err.message}` : ''}`.slice(0, 160));
       setStatus('idle');
     }
   }
@@ -145,7 +156,7 @@ export default function ReportForm() {
             </li>
           ))}
         </ul>
-        {error && <p className="error" role="alert">{error}</p>}
+        {error && <p className="error" role="alert">{error}{detail && <small className="hint"> ({detail})</small>}</p>}
         <button type="button" className="secondary" onClick={() => { setDupes([]); submit(true); }}>
           {s.differentIssue}
         </button>
@@ -195,7 +206,7 @@ export default function ReportForm() {
         <textarea rows={3} value={f.description} onChange={set('description')} maxLength={500} />
       </label>
 
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <p className="error" role="alert">{error}{detail && <small className="hint"> ({detail})</small>}</p>}
       <button type="submit" disabled={busy}>
         {status === 'checking' ? s.checking : status === 'saving' ? s.saving : s.submit}
       </button>
