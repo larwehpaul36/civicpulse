@@ -3,7 +3,7 @@ import Nav from '@/components/Nav';
 import SyncBanner from '@/components/SyncBanner';
 import { strings as s } from '@/lib/strings';
 
-const site = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL ? 'https://civicpulse-nine-lime.vercel.app' : 'http://localhost:3000');
+const site = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL ? 'https://civicpulse-live.vercel.app' : 'http://localhost:3000');
 
 export const metadata = {
   metadataBase: new URL(site),
