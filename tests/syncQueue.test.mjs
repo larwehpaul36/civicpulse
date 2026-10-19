@@ -48,7 +48,7 @@ test('happy path: uploads, inserts, then empties the queue', async () => {
   assert.equal(calls.upload[0].opts.contentType, 'image/jpeg');
   assert.deepEqual(calls.issues[0], {
     id: 'a', reporter_id: 'user-1', category_id: 'cat-1', region_id: 'reg-1', severity: 'medium',
-    description: 'Choked gutter', location: 'SRID=4326;POINT(-0.187 5.6037)',
+    description: 'Choked gutter', details: {}, location: 'SRID=4326;POINT(-0.187 5.6037)',
   });
   assert.deepEqual(calls.photos[0], { issue_id: 'a', kind: 'before', storage_path: 'user-1/a-before.jpg', uploaded_by: 'user-1' });
   assert.equal((await queue.getAll()).length, 0);
@@ -169,4 +169,16 @@ test('deleting a report mid-send does not bring it back', async () => {
   await syncer.syncAll();
   await new Promise((r) => setTimeout(r, 10));
   assert.equal((await queue.getAll()).length, 0);
+});
+
+test('an "Other" report sends the reporter\'s own words; a normal report sends none', async () => {
+  await clearQueue();
+  const { supabase, calls } = stub();
+  const syncer = createSyncer({ supabase, ensureUser: async () => USER, queue });
+  await queue.enqueue(report('o', { otherLabel: 'Fallen tree' }));
+  await queue.enqueue(report('n'));
+  await syncer.syncAll();
+  const row = Object.fromEntries(calls.issues.map((r) => [r.id, r]));
+  assert.deepEqual(row.o.details, { other_label: 'Fallen tree' });
+  assert.deepEqual(row.n.details, {});
 });

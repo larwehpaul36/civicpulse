@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { newId } from '@/lib/newId';
+import { categoryTitle } from '@/lib/categoryTitle';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { supabase, ensureUser } from '@/lib/supabase';
@@ -16,7 +17,7 @@ const LocationPicker = dynamic(() => import('./LocationPicker'), {
   loading: () => <div className="map" />,
 });
 
-const EMPTY = { categoryId: '', regionId: '', severity: 'medium', description: '' };
+const EMPTY = { categoryId: '', regionId: '', severity: 'medium', description: '', otherLabel: '' };
 
 // The similar-reports check is a nicety. With no signal (or a slow one) skip it rather than block the report.
 async function findDuplicates(loc, categoryId) {
@@ -69,15 +70,19 @@ export default function ReportForm() {
 
   const preview = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
   const set = (key) => (e) => setF({ ...f, [key]: e.target.value });
+  // "Other problem": the person names it in a few words, and a moderator finds the right office.
+  const otherId = categories.find((c) => c.slug === 'other')?.id;
+  const isOther = !!otherId && f.categoryId === otherId;
 
   // Every report is saved on the phone first, then sent. A weak signal can no longer lose it.
   async function submit(skipDuplicateCheck = false) {
     setError('');
     setDetail('');
     if (!f.categoryId || !f.regionId || !photo || !loc) return setError(s.missing);
+    if (isOther && !f.otherLabel.trim()) return setError(s.other.missing);
     let stage = 'start';
     try {
-      if (!skipDuplicateCheck && navigator.onLine) {
+      if (!skipDuplicateCheck && !isOther && navigator.onLine) {
         setStatus('checking');
         stage = 'duplicates';
         // A failed duplicate check must never stop someone from reporting.
@@ -97,6 +102,7 @@ export default function ReportForm() {
         regionId: f.regionId,
         severity: f.severity,
         description: f.description.trim() || null,
+        otherLabel: isOther ? f.otherLabel.trim().slice(0, 80) : null,
         loc,
         photo: blob,
       });
@@ -138,6 +144,7 @@ export default function ReportForm() {
   function next() {
     setError(''); setDetail('');
     if (step === 0 && (!f.categoryId || !photo)) return setError(s.flow.miss0);
+    if (step === 0 && isOther && !f.otherLabel.trim()) return setError(s.other.missing);
     if (step === 1 && (!f.regionId || !loc)) return setError(s.flow.miss1);
     setStep((n) => Math.min(2, n + 1));
   }
@@ -203,6 +210,12 @@ export default function ReportForm() {
             ))}
           </select>
         </label>
+        {isOther && (
+          <label>{s.other.label}
+            <input type="text" value={f.otherLabel} onChange={set('otherLabel')} maxLength={80} aria-required="true" />
+            <span className="hint">{s.other.hint}</span>
+          </label>
+        )}
         <label>{s.severity}
           <select value={f.severity} onChange={set('severity')}>
             {Object.entries(s.severityOptions).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -233,7 +246,7 @@ export default function ReportForm() {
           <textarea rows={3} value={f.description} onChange={set('description')} maxLength={500} />
         </label>
         <dl className="review">
-          <dt>{s.flow.rProblem}</dt><dd>{cat ? `${label(cat.name)}` : '—'} · {s.severityOptions[f.severity]}</dd>
+          <dt>{s.flow.rProblem}</dt><dd>{cat ? categoryTitle(label(cat.name), isOther ? f.otherLabel.trim() : null) : '—'} · {s.severityOptions[f.severity]}</dd>
           <dt>{s.flow.rPlace}</dt><dd>{regionText || '—'}{loc ? ` · ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}` : ''}</dd>
           <dt>{s.flow.rPhoto}</dt><dd>{preview ? <img className="thumb" src={preview} alt={s.a11y.yourPhoto} /> : '—'}</dd>
         </dl>

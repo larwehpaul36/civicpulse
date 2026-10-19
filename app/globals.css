@@ -224,7 +224,7 @@ body { min-height:100dvh; }
 .chart .rl { fill:none; stroke:var(--green); stroke-width:3; stroke-linejoin:round; }
 .legend { display:flex; gap:1.2rem; font-size:.85rem; font-weight:700; margin-bottom:.4rem; } .legend i { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:.4rem; }
 .chart details { margin-top:.6rem; } .chart summary { cursor:pointer; font-weight:700; min-height:44px; display:flex; align-items:center; }
-.pcards { display:grid; gap:.8rem; margin-bottom:1.5rem; }
+.pcards { display:grid; gap:.8rem; margin:0 0 1.5rem; padding:0; list-style:none; }
 .pcard { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:1.1rem; box-shadow:var(--shadow); display:grid; gap:.8rem; animation:rise .6s var(--ease) both; }
 .pcard header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.5rem; } .pcard h3 { margin:0; font-size:1.15rem; }
 .pmetrics { display:grid; grid-template-columns:repeat(4,1fr); gap:.8rem; }

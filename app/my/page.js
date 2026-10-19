@@ -6,6 +6,7 @@ import { loadMine, markAllRead } from '@/lib/notifications';
 import { useOutbox } from '@/lib/useOutbox';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
+import { categoryTitle } from '@/lib/categoryTitle';
 import NotificationSettings from '@/components/NotificationSettings';
 
 const when = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -74,7 +75,7 @@ export default function MyReportsPage() {
                 <span className="chip">{s.statusLabels[r.status] ?? r.status}</span>
                 {freshIssues.has(r.id) && <span className="badge">{s.mine.updated}</span>}
               </span>
-              <strong>{catName[r.category_id] ?? ''}</strong>
+              <strong>{categoryTitle(catName[r.category_id] ?? '', r.other_label)}</strong>
               <span className="hint">{s.daysOpen(r.days_open)}</span>
               {r.description && <span>{r.description.slice(0, 100)}</span>}
             </Link>

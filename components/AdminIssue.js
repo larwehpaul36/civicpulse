@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { categoryTitle } from '@/lib/categoryTitle';
 import { supabase } from '@/lib/supabase';
 import { compressImage } from '@/lib/compressImage';
 import { linksOf, otherEnd, parseIssueId, suggestions } from '@/lib/relatedIssues';
@@ -23,7 +24,9 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [partyId, setPartyId] = useState(i.party_id ?? '');
-  const [remember, setRemember] = useState(true);
+  const [remember, setRemember] = useState(!i.other_label); // an "Other" report must not teach the system a rule
+  const [newCat, setNewCat] = useState('');
+  const title = categoryTitle(categoryName, i.other_label);
   const [file, setFile] = useState(null);
   const [channel, setChannel] = useState('other');
   const [relation, setRelation] = useState('duplicate');
@@ -38,7 +41,7 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
 
   const message = () => A.escalationMessage({
     party: i.party_name ?? '',
-    category: categoryName,
+    category: title,
     description: i.description,
     severity: s.severityOptions[i.severity],
     days: i.days_open,
@@ -68,7 +71,7 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
   }
   function openEmail() {
     setChannel('email');
-    const subject = encodeURIComponent(`Unresolved problem reported by residents: ${categoryName}`);
+    const subject = encodeURIComponent(`Unresolved problem reported by residents: ${title}`);
     window.location.href = `mailto:${i.party_email}?subject=${subject}&body=${encodeURIComponent(message())}`;
   }
   async function copy() {
@@ -100,7 +103,7 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
       <details className="admin-card">
         <summary>
           <span className="chip">{s.statusLabels[i.status] ?? i.status}</span>{' '}
-          <strong>{categoryName}</strong>
+          <strong>{title}</strong>
           <span className="hint">
             {' '}· {s.daysOpen(i.days_open)} · {s.confirmations(i.confirmation_count)}
             {i.flag_count > 0 && <> · <strong>{A.flagsCount(i.flag_count)}</strong></>}
@@ -173,6 +176,14 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
             </button>
           </div>
           <label className="check"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> {A.remember}</label>
+          <div className="row">
+            <select value={newCat} onChange={(e) => setNewCat(e.target.value)} aria-label={A.changeCategory}>
+              <option value="">{A.changeCategory}…</option>
+              {Object.entries(categoryNames).filter(([id]) => id !== i.category_id).map(([id, n]) => <option key={id} value={id}>{n}</option>)}
+            </select>
+            <button type="button" className="secondary" disabled={busy || !newCat}
+              onClick={() => run(() => rpc('admin_set_category', { p_issue: i.id, p_category: newCat }))}>{A.changeCategoryBtn}</button>
+          </div>
 
           {i.party_id && (
             <>

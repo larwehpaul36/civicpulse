@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
+import { categoryTitle } from '@/lib/categoryTitle';
 
 const IssuesMap = dynamic(() => import('@/components/IssuesMap'), {
   ssr: false,
@@ -75,7 +76,7 @@ export default function IssuesPage() {
           <li key={i.id}>
             <Link href={`/issues/${i.id}`}>
               <span className="chip">{s.statusLabels[i.status]}</span>
-              <strong>{catName[i.category_id] ?? ''}</strong>
+              <strong>{categoryTitle(catName[i.category_id] ?? '', i.other_label)}</strong>
               <span>{i.description || '—'}</span>
               <span className="hint">{s.daysOpen(i.days_open)} · {s.confirmations(i.confirmation_count)}</span>
             </Link>

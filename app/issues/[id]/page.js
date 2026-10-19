@@ -6,6 +6,7 @@ import { supabase, ensureUser } from '@/lib/supabase';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import ShareButton from '@/components/ShareButton';
+import { categoryTitle } from '@/lib/categoryTitle';
 
 const photoUrl = (path) => supabase.storage.from('issue-photos').getPublicUrl(path).data.publicUrl;
 const dateText = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -40,7 +41,7 @@ export default function IssuePage() {
     let related = [];
     if (issue && pairs.length) {
       const { data: rows } = await supabase.from('public_issues')
-        .select('id, category_id, status, description, days_open').in('id', pairs.map((p) => p.id));
+        .select('id, category_id, status, description, days_open, other_label').in('id', pairs.map((p) => p.id));
       related = (rows ?? []).map((r) => ({ ...r, relation: pairs.find((p) => p.id === r.id)?.relation }));
     }
     setData({ issue, photos: ph.data ?? [], log: log.data ?? [], contacts: contacts.data ?? [], cats: cats.data ?? [], party, related });
@@ -85,13 +86,13 @@ export default function IssuePage() {
   return (
     <main className="wrap">
       <p><Link href="/issues">{s.back}</Link></p>
-      <h1 className="page-title">{label(cat?.name)}</h1>
+      <h1 className="page-title">{categoryTitle(label(cat?.name), issue.other_label)}</h1>
       <p><span className="chip">{s.statusLabels[issue.status]}</span></p>
       <p>{issue.description || '—'}</p>
       <p className="hint">{s.daysOpen(issue.days_open)} · {s.confirmations(issue.confirmation_count)}</p>
       <p><strong>{s.responsibleParty}:</strong> {party?.name ?? s.notAssigned}</p>
       {waiting !== null && <p className="warn">{s.sentAgo(waiting)}</p>}
-      <ShareButton title={label(cat?.name)} text={s.share.line(label(cat?.name), issue.status, issue.days_open)} />
+      <ShareButton title={categoryTitle(label(cat?.name), issue.other_label)} text={s.share.line(categoryTitle(label(cat?.name), issue.other_label), issue.status, issue.days_open)} />
 
       <div className="photos">
         <figure>
@@ -117,7 +118,7 @@ export default function IssuePage() {
               <li key={r.id}>
                 <Link href={`/issues/${r.id}`}>
                   <span className="chip">{s.statusLabels[r.status]}</span>
-                  <strong>{label(cats.find((c) => c.id === r.category_id)?.name)}</strong>
+                  <strong>{categoryTitle(label(cats.find((c) => c.id === r.category_id)?.name), r.other_label)}</strong>
                   <span className="hint">{r.relation === 'duplicate' ? s.related.duplicate : s.related.related} · {s.daysOpen(r.days_open)}</span>
                   {r.description && <span>{r.description.slice(0, 100)}</span>}
                 </Link>

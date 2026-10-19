@@ -42,6 +42,17 @@ await check('At least one category is enabled', 'Run 001, or set categories.enab
   categoryId = data[0].id;
   return { note: data.map((c) => c.slug).join(', ') };
 });
+await check('"Other problem" category exists (reports not on the list)', 'Run 009_other_category.sql in the Supabase SQL editor', async () => {
+  const { data, error } = await sb.from('categories').select('id, enabled').eq('slug', 'other').maybeSingle();
+  must(!error, error?.message);
+  return data?.enabled ? { note: 'enabled' } : { warn: 'missing or disabled: residents cannot report things that are not on the list' };
+});
+await check('Public list exposes other_label, and My reports still works', 'Run 009_other_category.sql (check A at the bottom tells you which part failed)', async () => {
+  const a = await sb.from('public_issues').select('other_label').limit(1);
+  must(!a.error, a.error?.message);
+  const b = await sb.rpc('my_reports');
+  must(!b.error, b.error?.message);
+});
 await check('Someone is responsible for something', 'Add rows to category_responsibilities (see dev helpers at the bottom of 004) or add parties in /admin', async () => {
   const { count, error } = await sb.from('category_responsibilities').select('id', { count: 'exact', head: true });
   must(!error, error?.message);

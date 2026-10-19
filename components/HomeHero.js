@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { home as h } from '@/lib/homeStrings';
+import { strings as s } from '@/lib/strings';
+import { partyStats, sortParties } from '@/lib/trackerStats';
 
 const S = 520, PAD = 70;
 
@@ -25,9 +27,15 @@ function median(a) {
 
 export default function HomeHero() {
   const [rows, setRows] = useState(null);
+  const [names, setNames] = useState({});
   useEffect(() => {
-    supabase.from('public_issues').select('id, status, lat, lng, days_open').order('created_at', { ascending: false }).limit(2000)
-      .then(({ data }) => setRows(data ?? []));
+    Promise.all([
+      supabase.from('public_issues').select('id, status, lat, lng, days_open, party_id, sent_at, resolved_at').order('created_at', { ascending: false }).limit(2000),
+      supabase.from('responsible_parties').select('id, name'),
+    ]).then(([i, p]) => {
+      setRows(i.data ?? []);
+      setNames(Object.fromEntries((p.data ?? []).map((x) => [x.id, x.name])));
+    });
   }, []);
 
   const total = rows?.length ?? 0;
@@ -38,6 +46,8 @@ export default function HomeHero() {
   const nums = rows === null ? [dash, dash, dash, dash]
     : [total, total ? `${Math.round((confirmed / total) * 100)}%` : '0%', resolved.length, med === null ? dash : `${med} d`];
   const pins = project(rows ?? []);
+  // Only offices with enough cases to judge fairly (3 or more sent) and at least one fix.
+  const top = sortParties(partyStats(rows ?? [], Date.now()), 'fastest').filter((p) => !p.early && p.resolved > 0).slice(0, 3);
 
   return (
     <>
@@ -78,6 +88,25 @@ export default function HomeHero() {
       <div className="statband"><div className="statband-in">
         {h.stats.map((l, i) => (<div key={l}><div className="stat-n">{nums[i]}</div><div className="stat-l">{l}</div></div>))}
       </div></div>
+
+      {top.length > 0 && (
+        <section className="how teaser">
+          <h2>{h.fastTitle}</h2>
+          <p className="hint">{h.fastNote}</p>
+          <ol className="pcards">
+            {top.map((p) => (
+              <li key={p.id} className="pcard">
+                <header><h3>{names[p.id] ?? '—'}</h3></header>
+                <div className="pmetrics">
+                  <div className="m"><b>{s.tracker2.days(p.median)}</b><span>{s.tracker2.median}</span></div>
+                  <div className="m"><b>{p.resolved}/{p.sent}</b><span>{s.tracker2.rate} ({p.rate}%)</span></div>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <p><Link href="/tracker">{h.fastLink} →</Link></p>
+        </section>
+      )}
     </>
   );
 }

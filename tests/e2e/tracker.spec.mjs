@@ -38,3 +38,10 @@ test('sorting by backlog puts the office with the most open cases first', async 
   await page.getByRole('button', { name: 'Biggest backlog', exact: true }).click();
   await expect(page.locator('.pcard').first()).toContainText('Office Beta');
 });
+
+test('the home page shows the fastest offices, but only those with enough cases', async ({ page }) => {
+  await page.goto('/');
+  const teaser = page.locator('.teaser');
+  await expect(teaser).toContainText('Office Alpha', { timeout: 15_000 }); // 3 cases sent, 2 fixed
+  await expect(teaser).not.toContainText('Office Beta'); // only 2 cases and none fixed: not ranked
+});
