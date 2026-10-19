@@ -96,11 +96,11 @@ export default function IssuePage() {
       <div className="photos">
         <figure>
           <figcaption>{s.before}</figcaption>
-          {before ? <img src={photoUrl(before.storage_path)} alt="" /> : <div className="empty" />}
+          {before ? <img src={photoUrl(before.storage_path)} alt={s.a11y.beforePhoto} /> : <div className="empty" />}
         </figure>
         <figure>
           <figcaption>{s.after}</figcaption>
-          {after ? <img src={photoUrl(after.storage_path)} alt="" /> : <div className="empty">{s.noAfter}</div>}
+          {after ? <img src={photoUrl(after.storage_path)} alt={s.a11y.afterPhoto} /> : <div className="empty">{s.noAfter}</div>}
         </figure>
       </div>
 

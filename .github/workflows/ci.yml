@@ -15,6 +15,7 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm test
+      - run: npm run lint:a11y
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
   e2e:
@@ -27,6 +28,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - run: npm run test:a11y
       - uses: actions/upload-artifact@v4
         if: failure()
         with: { name: playwright-report, path: test-results }

@@ -11,7 +11,9 @@
     "check:live": "node --env-file=.env.local scripts/check-live.mjs",
     "playwright:install": "playwright install chromium",
     "test:e2e": "playwright test",
-    "test:e2e:live": "playwright test -c playwright.live.config.mjs"
+    "test:e2e:live": "playwright test -c playwright.live.config.mjs",
+    "lint:a11y": "eslint .",
+    "test:a11y": "playwright test -c playwright.a11y.config.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
@@ -24,7 +26,10 @@
     "node": ">=20.9"
   },
   "devDependencies": {
-    "fake-indexeddb": "^6.2.5",
-    "@playwright/test": "^1.50.0"
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.50.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "fake-indexeddb": "^6.2.5"
   }
 }

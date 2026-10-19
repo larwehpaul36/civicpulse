@@ -212,7 +212,7 @@ export default function ReportForm() {
           <input type="file" accept="image/*" capture="environment" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} aria-required="true" />
           <span className="hint">{s.photoHelp}</span>
         </label>
-        {preview && <img className="preview" src={preview} alt="" />}
+        {preview && <img className="preview" src={preview} alt={s.a11y.yourPhoto} />}
       </div>
 
       <div className="stepbody" hidden={step !== 1}>
@@ -235,7 +235,7 @@ export default function ReportForm() {
         <dl className="review">
           <dt>{s.flow.rProblem}</dt><dd>{cat ? `${label(cat.name)}` : '—'} · {s.severityOptions[f.severity]}</dd>
           <dt>{s.flow.rPlace}</dt><dd>{regionText || '—'}{loc ? ` · ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}` : ''}</dd>
-          <dt>{s.flow.rPhoto}</dt><dd>{preview ? <img className="thumb" src={preview} alt="" /> : '—'}</dd>
+          <dt>{s.flow.rPhoto}</dt><dd>{preview ? <img className="thumb" src={preview} alt={s.a11y.yourPhoto} /> : '—'}</dd>
         </dl>
       </div>
 

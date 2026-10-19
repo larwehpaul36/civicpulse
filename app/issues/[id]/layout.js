@@ -5,7 +5,7 @@ import { strings as s } from '@/lib/strings';
 export async function generateMetadata({ params }) {
   const { id } = await params;
   const d = await getShare(id);
-  if (!d) return { title: 'Report not found · CivicPulse', robots: { index: false } };
+  if (!d) return { title: 'Report not found', robots: { index: false } };
   const title = `${d.category} · ${s.statusLabels[d.status] ?? d.status}`;
   const description = s.share.line(d.category, d.status, d.days_open);
   return {

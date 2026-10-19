@@ -111,8 +111,8 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
         <div className="admin-body">
           {i.description && <p>{i.description}</p>}
           <div className="photos">
-            {i.before_path && <img src={photoUrl(i.before_path)} alt="" />}
-            {i.after_path && <img src={photoUrl(i.after_path)} alt="" />}
+            {i.before_path && <img src={photoUrl(i.before_path)} alt={s.a11y.beforePhoto} />}
+            {i.after_path && <img src={photoUrl(i.after_path)} alt={s.a11y.afterPhoto} />}
           </div>
           <p><a href={mapUrl(i.lat, i.lng)} target="_blank" rel="noopener noreferrer">{A.exactLocation}</a></p>
 

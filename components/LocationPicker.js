@@ -30,6 +30,16 @@ export default function LocationPicker({ value, onChange }) {
       tiles.on('tileerror', () => setNoTiles(true));
       tiles.on('tileload', () => setNoTiles(false));
       map.current.on('click', (e) => onChangeRef.current({ lat: e.latlng.lat, lng: e.latlng.lng }));
+      // Keyboard: arrow keys move the map (Leaflet), Enter or Space marks the centre.
+      const box = map.current.getContainer();
+      box.setAttribute('role', 'application');
+      box.setAttribute('aria-label', s.a11y.mapLabel);
+      box.addEventListener('keydown', (e) => {
+        if (e.target !== box || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        const c = map.current.getCenter();
+        onChangeRef.current({ lat: c.lat, lng: c.lng });
+      });
       setReady(true);
     });
     return () => {
@@ -68,6 +78,7 @@ export default function LocationPicker({ value, onChange }) {
       <div ref={el} className="map" role="application" aria-label={s.location} />
       <p className="hint">{value ? s.locationSet : s.tapMap} {msg}</p>
       {value && <p className="hint coords">{value.lat.toFixed(5)}, {value.lng.toFixed(5)}</p>}
+      <p className="hint">{s.a11y.mapKeys}</p>
       {noTiles && <p className="hint">{s.mapOffline}</p>}
     </div>
   );

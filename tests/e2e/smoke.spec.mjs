@@ -46,3 +46,19 @@ test('offline page and manifest are served', async ({ page, request }) => {
   await page.goto('/offline');
   await expect(page.locator('.page-title').first()).toBeVisible();
 });
+
+test('the first Tab stop is a skip link that jumps to the main content', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('Tab');
+  const skip = page.getByRole('link', { name: 'Skip to main content' });
+  await expect(skip).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#main$/);
+});
+
+test('each page has its own title', async ({ page }) => {
+  await page.goto('/tracker');
+  await expect(page).toHaveTitle('Tracker · CivicPulse');
+  await page.goto('/issues');
+  await expect(page).toHaveTitle('Reports · CivicPulse');
+});

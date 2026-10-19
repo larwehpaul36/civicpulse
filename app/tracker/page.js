@@ -17,7 +17,7 @@ function TrendChart({ trend }) {
   const filed = trend.reduce((n, w) => n + w.filed, 0), resolved = trend.reduce((n, w) => n + w.resolved, 0);
   return (
     <div className="chart">
-      <div className="legend"><span><i style={{ background: '#c99700' }} />{T.filed}</span><span><i style={{ background: 'var(--green)' }} />{T.resolved}</span></div>
+      <div className="legend"><span><i style={{ background: 'var(--goldline)' }} />{T.filed}</span><span><i style={{ background: 'var(--green)' }} />{T.resolved}</span></div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${T.chartTitle}: ${filed} ${T.filed.toLowerCase()}, ${resolved} ${T.resolved.toLowerCase()}`}>
         <line x1={L} x2={W - R} y1={y(0)} y2={y(0)} stroke="var(--line)" /><line x1={L} x2={W - R} y1={y(max)} y2={y(max)} stroke="var(--line)" strokeDasharray="3 4" />
         <text x={L - 6} y={y(0) + 4} textAnchor="end">0</text><text x={L - 6} y={y(max) + 4} textAnchor="end">{max}</text>
