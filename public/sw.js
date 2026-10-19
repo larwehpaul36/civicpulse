@@ -7,7 +7,7 @@ const ASSETS = `cp-assets-${VERSION}`; // scripts and styles under /_next/static
 const TILES = 'cp-tiles-v1'; // map tiles the person has already looked at
 const PAGES = ['/', '/offline'];
 const ASSET_LIMIT = 250;
-const TILE_LIMIT = 400;
+const TILE_LIMIT = 800; // about 12 MB: room for a few saved areas as well as maps already looked at
 const HOME_WAIT_MS = 3000; // on a slow connection, show the saved form after this long
 
 // Script and style URLs mentioned in a page's HTML or in a script. Scripts list the chunks they load
