@@ -204,6 +204,29 @@ body { min-height:100dvh; }
 
 .sharerow { display:flex; flex-wrap:wrap; align-items:center; gap:.7rem; margin:1rem 0; } .sharerow .cta, .sharerow button { margin:0; }
 
+/* ---- tracker v2 ---- */
+@keyframes grow { from { transform:scaleX(0); } }
+.kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:.8rem; margin:1.2rem 0; }
+.tile { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:1rem; box-shadow:var(--shadow); }
+.tile b { display:block; font-size:clamp(1.7rem,4vw,2.4rem); font-weight:900; letter-spacing:-.03em; font-variant-numeric:tabular-nums; }
+.tile span { color:var(--muted); font-size:.9rem; }
+.chartcard h2 { margin-top:0; }
+.chart svg { width:100%; height:auto; display:block; } .chart text { fill:var(--muted); font-size:11px; }
+.chart .f { fill:color-mix(in srgb,var(--signal) 28%,transparent); } .chart .fl { fill:none; stroke:#c99700; stroke-width:2.5; stroke-linejoin:round; }
+.chart .rl { fill:none; stroke:var(--green); stroke-width:3; stroke-linejoin:round; }
+.legend { display:flex; gap:1.2rem; font-size:.85rem; font-weight:700; margin-bottom:.4rem; } .legend i { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:.4rem; }
+.chart details { margin-top:.6rem; } .chart summary { cursor:pointer; font-weight:700; min-height:44px; display:flex; align-items:center; }
+.pcards { display:grid; gap:.8rem; margin-bottom:1.5rem; }
+.pcard { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:1.1rem; box-shadow:var(--shadow); display:grid; gap:.8rem; animation:rise .6s var(--ease) both; }
+.pcard header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.5rem; } .pcard h3 { margin:0; font-size:1.15rem; }
+.pmetrics { display:grid; grid-template-columns:repeat(4,1fr); gap:.8rem; }
+.m b { display:block; font-size:1.45rem; font-weight:900; letter-spacing:-.02em; font-variant-numeric:tabular-nums; } .m span { font-size:.82rem; color:var(--muted); }
+.rate { height:8px; border-radius:99px; background:var(--line); overflow:hidden; } .rate i { display:block; height:100%; background:var(--green); border-radius:99px; transform-origin:left; animation:grow .9s var(--ease) both; }
+.sparkrow { display:flex; align-items:center; gap:.7rem; } .sparkrow .hint { margin:0; }
+.spark { width:84px; height:26px; flex:none; } .spark polyline { fill:none; stroke:var(--green); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.how-it-works { margin:1.5rem 0; } .how-it-works summary { cursor:pointer; font-weight:800; min-height:44px; display:flex; align-items:center; } .how-it-works li { margin:.4rem 0; color:var(--muted); }
+@media (max-width:40rem) { .kpis, .pmetrics { grid-template-columns:repeat(2,1fr); } }
+
 /* ---- 3-step report flow and success screen ---- */
 .stepper { display:grid; grid-template-columns:repeat(3,1fr); gap:.4rem; list-style:none; padding:0; margin:.2rem 0 0; }
 .stepper li { height:6px; border-radius:99px; background:var(--line); position:relative; overflow:hidden; }
@@ -237,6 +260,7 @@ body { min-height:100dvh; }
   .reveal, .scroll-reveal, .cards li, .page-title { animation:fade .4s both; }
   .pulse, .pulse i, .badge, .mapnote, .nav a.fab, .hx-live i, .map { animation:none; }
   .rip, .confetti { display:none; }
+  .rate i { animation:none; }
   .tick circle, .tick path { animation:none; stroke-dashoffset:0; }
   .road { animation:none; stroke-dashoffset:0; }
   .cta, button, .cards a, .nav a { transition:background-color .2s, color .2s, border-color .2s, box-shadow .2s; }
