@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
 
 test('"Other problem" asks the person to name it before moving on', async ({ page }) => {
   await page.goto('/');
-  const category = page.getByLabel('What is the problem?', { exact: true });
+  const category = page.getByLabel('What is the problem?');
   await expect(category.locator('option')).toHaveCount(3, { timeout: 15_000 }); // choose + two categories
   await expect(page.getByLabel('Name the problem (a few words)')).toHaveCount(0); // hidden for normal categories
   await category.selectOption({ label: 'Not on the list: Other problem' });
