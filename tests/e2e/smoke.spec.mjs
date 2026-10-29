@@ -62,3 +62,8 @@ test('each page has its own title', async ({ page }) => {
   await page.goto('/issues');
   await expect(page).toHaveTitle('Reports · CivicPulse');
 });
+
+test('the SMS endpoint refuses requests that Supabase did not sign', async ({ request }) => {
+  const res = await request.post('/api/auth/send-sms', { data: '{}' });
+  expect([401, 500]).toContain(res.status()); // 500 only means the secret is not set in this test environment
+});

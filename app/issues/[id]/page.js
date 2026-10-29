@@ -6,6 +6,8 @@ import { supabase, ensureUser } from '@/lib/supabase';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import ShareButton from '@/components/ShareButton';
+import { useVerify } from '@/components/PhoneVerify';
+import { needsPhone } from '@/lib/verifyFlow';
 import { categoryTitle } from '@/lib/categoryTitle';
 
 const photoUrl = (path) => supabase.storage.from('issue-photos').getPublicUrl(path).data.publicUrl;
@@ -15,6 +17,7 @@ export default function IssuePage() {
   const { id } = useParams();
   const [data, setData] = useState(null);
   const [msg, setMsg] = useState('');
+  const ask = useVerify();
 
   const load = useCallback(async () => {
     const [i, ph, log, contacts, cats] = await Promise.all([
@@ -49,10 +52,14 @@ export default function IssuePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function confirm() {
+  async function confirm(retried = false) {
     try {
       const user = await ensureUser();
       const { error } = await supabase.from('confirmations').insert({ issue_id: id, user_id: user.id });
+      if (error && needsPhone(error) && !retried) {
+        if (await ask()) return confirm(true); // phone confirmed: try once more
+        return setMsg(s.verify.cancelled);
+      }
       if (error) return setMsg(error.code === '23505' ? s.seeThanks : error.code === '42501' ? s.ownReport : s.failed);
       setMsg(s.seeThanks);
       load();
@@ -106,7 +113,7 @@ export default function IssuePage() {
       </div>
 
       {issue.status !== 'resolved' && (
-        <p><button type="button" onClick={confirm}>{s.iSeeThis}</button></p>
+        <p><button type="button" onClick={() => confirm()}>{s.iSeeThis}</button></p>
       )}
       {msg && <p aria-live="polite"><strong>{msg}</strong></p>}
 

@@ -3,12 +3,14 @@ import { useEffect, useState } from 'react';
 import { syncer } from '@/lib/sync';
 import { useOutbox } from '@/lib/useOutbox';
 import { strings as s } from '@/lib/strings';
+import { useVerify } from '@/components/PhoneVerify';
 
 // Sits under the nav on every page: registers the service worker, keeps the outbox syncing,
 // and shows what is waiting, so a resident always knows whether a report has left the phone.
 export default function SyncBanner() {
   const { items, running } = useOutbox();
   const [online, setOnline] = useState(true);
+  const ask = useVerify();
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
@@ -50,7 +52,8 @@ export default function SyncBanner() {
 
   const pending = items.filter((i) => i.status === 'pending');
   const failed = items.filter((i) => i.status === 'failed');
-  if (online && !pending.length && !failed.length) return null;
+  const phoneWait = items.filter((i) => i.status === 'needs_phone');
+  if (online && !pending.length && !failed.length && !phoneWait.length) return null;
 
   return (
     <div className="banners" role="status" aria-live="polite">
@@ -63,6 +66,12 @@ export default function SyncBanner() {
               {running ? s.outbox.sendingNow : s.outbox.sendNow}
             </button>
           )}
+        </div>
+      )}
+      {phoneWait.length > 0 && (
+        <div className="banner">
+          <p>{s.verify.waiting(phoneWait.length)}</p>
+          <button type="button" className="secondary" onClick={async () => { if (await ask()) syncer.resumeAfterVerification().catch(() => {}); }}>{s.verify.verifyToSend}</button>
         </div>
       )}
       {failed.map((item) => (

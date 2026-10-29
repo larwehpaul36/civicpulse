@@ -182,3 +182,35 @@ test('an "Other" report sends the reporter\'s own words; a normal report sends n
   assert.deepEqual(row.o.details, { other_label: 'Fallen tree' });
   assert.deepEqual(row.n.details, {});
 });
+
+test('a report refused for a missing phone check waits (not failed), keeps its photo, and sends after verification', async () => {
+  await clearQueue();
+  let refuse = true;
+  const { supabase, calls } = stub({ issue: () => (refuse ? { code: 'PV001', message: 'phone_verification_required' } : null) });
+  const syncer = createSyncer({ supabase, ensureUser: async () => USER, queue });
+  await queue.enqueue(report('w'));
+  await syncer.syncAll();
+  const [item] = await queue.getAll();
+  assert.equal(item.status, 'needs_phone');
+  assert.equal(item.attempts ?? 0, 0, 'not counted as a failed attempt');
+  assert.equal(calls.upload.length, 1);
+  await syncer.syncAll({ ignoreBackoff: true });
+  assert.equal(calls.issues.length, 1, 'does not keep retrying until the phone is confirmed');
+  refuse = false;
+  await syncer.resumeAfterVerification();
+  assert.equal((await queue.getAll()).length, 0);
+  assert.equal(calls.upload.length, 1, 'the photo is not uploaded twice');
+  assert.equal(syncer.hasSent('w'), true);
+});
+
+test('a blocked or slow bot check makes a report wait and retry later, not fail', async () => {
+  await clearQueue();
+  const { supabase } = stub();
+  const syncer = createSyncer({ supabase, ensureUser: async () => { throw new Error('captcha_failed'); }, queue });
+  await queue.enqueue(report('c'));
+  await syncer.syncAll();
+  const [item] = await queue.getAll();
+  assert.equal(item.status, 'pending');
+  assert.equal(item.attempts ?? 0, 0, 'not counted as a failed attempt');
+  assert.match(item.lastError, /captcha_failed/);
+});

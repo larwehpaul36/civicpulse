@@ -1,6 +1,7 @@
-﻿'use client';
+'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCaptchaToken } from '@/lib/captcha';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import AdminIssue from '@/components/AdminIssue';
@@ -21,8 +22,10 @@ function SignIn() {
   const [msg, setMsg] = useState('');
   async function send(e) {
     e.preventDefault();
+    let captchaToken;
+    try { captchaToken = await getCaptchaToken(); } catch { return setMsg(s.captchaFailed); }
     const { error } = await supabase.auth.signInWithOtp({
-      email, options: { emailRedirectTo: `${window.location.origin}/admin` },
+      email, options: { emailRedirectTo: `${window.location.origin}/admin`, ...(captchaToken ? { captchaToken } : {}) },
     });
     setMsg(error ? `Could not send the link: ${error.message}` : A.linkSent);
   }
@@ -199,4 +202,3 @@ export default function AdminPage() {
     </main>
   );
 }
-

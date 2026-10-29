@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { newId } from '@/lib/newId';
 import { categoryTitle } from '@/lib/categoryTitle';
+import { useVerify } from '@/components/PhoneVerify';
+import { needsPhone } from '@/lib/verifyFlow';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { supabase, ensureUser } from '@/lib/supabase';
@@ -43,6 +45,7 @@ export default function ReportForm() {
   const formRef = useRef(null);
   const moved = useRef(false);
   const [error, setError] = useState('');
+  const ask = useVerify();
   const [detail, setDetail] = useState('');
   const [dupes, setDupes] = useState([]);
   const [confirmedIds, setConfirmedIds] = useState([]);
@@ -118,10 +121,14 @@ export default function ReportForm() {
     }
   }
 
-  async function confirm(issueId) {
+  async function confirm(issueId, retried = false) {
     try {
       const user = await ensureUser();
       const { error } = await supabase.from('confirmations').insert({ issue_id: issueId, user_id: user.id });
+      if (error && needsPhone(error) && !retried) {
+        if (await ask()) return confirm(issueId, true);
+        return setError(s.verify.cancelled);
+      }
       if (error && error.code !== '23505') throw error; // 23505 = already confirmed
       setConfirmedIds((ids) => [...ids, issueId]);
     } catch (err) {
@@ -152,9 +159,11 @@ export default function ReportForm() {
 
   if (status === 'done') {
     const sent = syncer.hasSent(savedId);
-    const failed = items.find((i) => i.id === savedId)?.status === 'failed';
-    const title = sent ? s.sentTitle : failed ? s.outbox.failedTitle : running ? s.outbox.sendingTitle : s.outbox.savedTitle;
-    const body = sent ? s.sentBody : failed ? s.outbox.failedBody : s.outbox.savedBody;
+    const state = items.find((i) => i.id === savedId)?.status;
+    const failed = state === 'failed';
+    const hold = state === 'needs_phone'; // a second report today: saved, waiting for the phone check
+    const title = sent ? s.sentTitle : hold ? s.verify.holdTitle : failed ? s.outbox.failedTitle : running ? s.outbox.sendingTitle : s.outbox.savedTitle;
+    const body = sent ? s.sentBody : hold ? s.verify.holdBody : failed ? s.outbox.failedBody : s.outbox.savedBody;
     return (
       <section className={`panel done${failed ? ' done-bad' : ''}`} aria-live="polite">
         <div className="tick" aria-hidden="true">
@@ -163,6 +172,7 @@ export default function ReportForm() {
         </div>
         <h2>{title}</h2>
         <p>{body}</p>
+        {hold && <button type="button" onClick={async () => { if (await ask()) syncer.resumeAfterVerification().catch(() => {}); }}>{s.verify.verifyToSend}</button>}
         <p><Link href="/my">{s.mine.getUpdates}</Link></p>
         <button type="button" onClick={reset}>{s.another}</button>
       </section>

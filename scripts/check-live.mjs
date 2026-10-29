@@ -53,6 +53,18 @@ await check('Public list exposes other_label, and My reports still works', 'Run 
   const b = await sb.rpc('my_reports');
   must(!b.error, b.error?.message);
 });
+await check('Phone check helper exists (is_phone_verified)', 'Run 011_phone_verified.sql in the Supabase SQL editor', async () => {
+  const { data, error } = await sb.rpc('is_phone_verified');
+  must(!error, error?.message);
+  must(data === false, 'an anonymous visitor should not count as verified');
+});
+await check('SMS endpoint refuses unsigned requests', 'Deploy the app, then set SEND_SMS_HOOK_SECRET and ARKESEL_API_KEY in Vercel', async () => {
+  const site = process.env.NEXT_PUBLIC_SITE_URL || process.env.CHECK_SITE_URL;
+  if (!site) return { warn: 'add NEXT_PUBLIC_SITE_URL=https://civicpulse-live.vercel.app to .env.local to test this' };
+  const res = await fetch(`${site}/api/auth/send-sms`, { method: 'POST', body: '{}' });
+  must(res.status === 401 || res.status === 500, `answered ${res.status}`);
+  return res.status === 401 ? { note: 'signature required (good)' } : { warn: 'answers 500: SEND_SMS_HOOK_SECRET or ARKESEL_API_KEY is not set in Vercel yet' };
+});
 await check('Someone is responsible for something', 'Add rows to category_responsibilities (see dev helpers at the bottom of 004) or add parties in /admin', async () => {
   const { count, error } = await sb.from('category_responsibilities').select('id', { count: 'exact', head: true });
   must(!error, error?.message);
