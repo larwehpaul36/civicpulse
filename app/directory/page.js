@@ -36,7 +36,7 @@ export default function DirectoryPage() {
   const catName = useMemo(() => Object.fromEntries(data.cats.map((c) => [c.id, label(c.name)])), [data.cats]);
   const regionsById = useMemo(() => Object.fromEntries(data.regions.map((r) => [r.id, r])), [data.regions]);
   const areaName = useCallback((id) => areaLabel(id, regionsById), [regionsById]);
-  const pickable = useMemo(() => data.regions.filter((r) => ['region', 'city'].includes(r.level)), [data.regions]);
+  const pickable = useMemo(() => data.regions.filter((r) => ['region', 'city', 'area'].includes(r.level)), [data.regions]);
   const entries = useMemo(() => buildDirectory(data.parties, data.responsibilities), [data.parties, data.responsibilities]);
   const shown = useMemo(() => entries.filter((e) => matchesSearch(e, query, { catName, areaName })), [entries, query, catName, areaName]);
 

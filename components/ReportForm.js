@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { newId } from '@/lib/newId';
 import { categoryTitle } from '@/lib/categoryTitle';
+import { placeLabel, districtsOf, regionOf } from '@/lib/places';
 import { useVerify } from '@/components/PhoneVerify';
 import { needsPhone } from '@/lib/verifyFlow';
 import Link from 'next/link';
@@ -63,13 +64,12 @@ export default function ReportForm() {
     return () => { alive = false; };
   }, []);
 
-  const regionOptions = useMemo(() => {
-    const byId = Object.fromEntries(regions.map((r) => [r.id, r]));
-    return regions.map((r) => ({
-      id: r.id,
-      text: r.level === 'city' && byId[r.parent_id] ? `${r.name}, ${byId[r.parent_id].name}` : r.name,
-    }));
-  }, [regions]);
+  // Two steps: the region, then (optionally) the district or municipality inside it.
+  const placeById = useMemo(() => Object.fromEntries(regions.map((r) => [r.id, r])), [regions]);
+  const picked = placeById[f.regionId];
+  const regionPickId = regionOf(picked);
+  const topRegions = regions.filter((r) => r.level === 'region');
+  const districts = districtsOf(regions, regionPickId);
 
   const preview = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
   const set = (key) => (e) => setF({ ...f, [key]: e.target.value });
@@ -204,7 +204,7 @@ export default function ReportForm() {
 
   const busy = status !== 'idle';
   const cat = categories.find((c) => c.id === f.categoryId);
-  const regionText = regionOptions.find((r) => r.id === f.regionId)?.text;
+  const regionText = picked ? placeLabel(picked, placeById) : '';
 
   return (
     <form ref={formRef} className="panel" onSubmit={(e) => { e.preventDefault(); if (step < 2) next(); else submit(false); }}>
@@ -240,11 +240,19 @@ export default function ReportForm() {
 
       <div className="stepbody" hidden={step !== 1}>
         <label>{s.region}
-          <select value={f.regionId} onChange={set('regionId')} aria-required="true">
+          <select value={regionPickId} onChange={set('regionId')} aria-required="true">
             <option value="">{s.choose}</option>
-            {regionOptions.map((r) => <option key={r.id} value={r.id}>{r.text}</option>)}
+            {topRegions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </label>
+        {districts.length > 0 && (
+          <label>{s.district}
+            <select value={picked?.level === 'area' ? picked.id : ''} onChange={(e) => setF({ ...f, regionId: e.target.value || regionPickId })}>
+              <option value="">{s.districtNotSure}</option>
+              {districts.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </label>
+        )}
         <div className="field">
           <span className="label">{s.location}</span>
           {step === 1 && <LocationPicker value={loc} onChange={setLoc} />}

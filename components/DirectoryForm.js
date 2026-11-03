@@ -1,4 +1,5 @@
 'use client';
+import { placeLabel } from '@/lib/places';
 import { useMemo, useState } from 'react';
 import { suggestChange } from '@/lib/directoryApi';
 import { label } from '@/lib/i18n';
@@ -24,7 +25,7 @@ export default function DirectoryForm({ party = null, regions, categories, onSen
   const areas = useMemo(() => {
     const byId = Object.fromEntries(regions.map((r) => [r.id, r]));
     return regions
-      .map((r) => ({ id: r.id, text: r.level === 'city' && byId[r.parent_id] ? `${r.name}, ${byId[r.parent_id].name}` : r.name }))
+      .map((r) => ({ id: r.id, text: placeLabel(r, byId) }))
       .sort((a, b) => a.text.localeCompare(b.text));
   }, [regions]);
 

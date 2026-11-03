@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCaptchaToken } from '@/lib/captcha';
+import { placeLabel } from '@/lib/places';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import AdminIssue from '@/components/AdminIssue';
@@ -72,10 +73,11 @@ function AddParty({ regions, onSaved }) {
         <label>{A.area}
           <select value={f.region} onChange={set('region')}>
             <option value="">{s.choose}</option>
-            {regions.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.level === 'city' && byId[r.parent_id] ? `${r.name}, ${byId[r.parent_id].name}` : r.name}
-              </option>
+            {regions.filter((r) => r.level === 'region').map((g) => (
+              <optgroup key={g.id} label={g.name}>
+                <option value={g.id}>{g.name} (whole region)</option>
+                {regions.filter((r) => r.parent_id === g.id).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </optgroup>
             ))}
           </select>
         </label>
@@ -112,8 +114,8 @@ export default function AdminPage() {
     const [i, c, p, r, l, sg] = await Promise.all([
       supabase.rpc('admin_list_issues'),
       supabase.from('categories').select('id, name'),
-      supabase.from('responsible_parties').select('id, name').eq('verified', true).order('name'),
-      supabase.from('regions').select('id, name, level, parent_id').in('level', ['region', 'city']).order('name'),
+      supabase.from('responsible_parties').select('id, name, region_id').eq('verified', true).order('name'),
+      supabase.from('regions').select('id, name, level, parent_id').in('level', ['region', 'city', 'area']).order('name'),
       supabase.from('issue_links').select('issue_a, issue_b, relation'),
       supabase.rpc('admin_list_suggestions'),   // empty until 008 has been run
     ]);
@@ -130,7 +132,7 @@ export default function AdminPage() {
 
   const regionName = useMemo(() => {
     const byId = Object.fromEntries(regions.map((r) => [r.id, r]));
-    return (id) => { const r = byId[id]; return r ? (r.level === 'city' && byId[r.parent_id] ? `${r.name}, ${byId[r.parent_id].name}` : r.name) : ''; };
+    return (id) => { const r = byId[id]; return r ? placeLabel(r, byId) : ''; };
   }, [regions]);
   const catName = useMemo(() => Object.fromEntries(cats.map((c) => [c.id, label(c.name)])), [cats]);
   const counts = useMemo(
@@ -188,7 +190,7 @@ export default function AdminPage() {
           {shown.length === 0 && <p>{A.none}</p>}
           <ul className="cards">
             {shown.map((i) => (
-              <AdminIssue key={i.id} issue={i} categoryName={catName[i.category_id] ?? ''} categoryNames={catName} parties={parties} allIssues={issues} links={links} onChanged={refresh} />
+              <AdminIssue key={i.id} issue={i} categoryName={catName[i.category_id] ?? ''} categoryNames={catName} parties={parties} regions={regions} allIssues={issues} links={links} onChanged={refresh} />
             ))}
           </ul>
             </>

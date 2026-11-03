@@ -6,7 +6,7 @@ const cats = [
   { id: 'c1', slug: 'pothole', name: { en: 'Pothole' }, category_groups: { name: { en: 'Roads' } } },
   { id: 'c9', slug: 'other', name: { en: 'Other problem' }, category_groups: { name: { en: 'Not on the list' } } },
 ];
-const regions = [{ id: 'r1', name: 'Accra', level: 'city', parent_id: null }];
+const regions = [{ id: 'r1', name: 'Accra', level: 'region', parent_id: null }];
 const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
 
 test.beforeEach(async ({ page }) => {

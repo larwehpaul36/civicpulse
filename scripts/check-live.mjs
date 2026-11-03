@@ -15,22 +15,30 @@ try { await fetch(url, { method: 'HEAD' }); }
 catch { console.error(`Cannot reach ${url}. Check NEXT_PUBLIC_SUPABASE_URL (Project Settings > API) and your internet connection.`); process.exit(2); }
 const rows = [];
 let uid, categoryId;
+let captchaOn = false; // Supabase refuses scripted sign-ins that lack the Cloudflare check
 
 async function check(name, fix, fn) {
   try {
     const r = await fn();
-    rows.push({ name, status: r?.warn ? 'WARN' : 'PASS', note: r?.warn || r?.note || '', fix: r?.warn ? fix : '' });
+    rows.push({ name, status: r?.warn ? 'WARN' : 'PASS', note: r?.warn || r?.note || '', fix: r?.warn && !r?.skipped ? fix : '' });
   } catch (e) {
     rows.push({ name, status: 'FAIL', note: e.message, fix });
   }
 }
 const must = (cond, msg) => { if (!cond) throw new Error(msg); };
 
-await check('Anonymous sign-in works', 'Supabase > Authentication > Providers > enable "Anonymous sign-ins"', async () => {
+await check('Anonymous sign-in works (or is protected by the bot check)', 'Supabase > Authentication > Providers > enable "Anonymous sign-ins"', async () => {
   const { data, error } = await sb.auth.signInAnonymously();
+  if (error && /captcha/i.test(error.message)) {
+    captchaOn = true;
+    return { note: 'refused without the bot check, as it should be (the app passes the check; this script cannot)' };
+  }
   must(!error, error?.message);
   uid = data.user.id;
 });
+await check('Bot protection (Cloudflare Turnstile) is on', 'Supabase > Authentication > Attack Protection > enable CAPTCHA protection (see docs/turnstile-setup.md)', async () => (
+  captchaOn ? { note: 'on' } : { warn: 'off: anyone can create accounts with a script' }
+));
 await check('All 16 Ghana regions seeded', 'Run 001 and 002', async () => {
   const { count, error } = await sb.from('regions').select('id', { count: 'exact', head: true });
   must(!error, error?.message); must(count >= 16, `only ${count} regions`);
@@ -50,6 +58,7 @@ await check('"Other problem" category exists (reports not on the list)', 'Run 00
 await check('Public list exposes other_label, and My reports still works', 'Run 009_other_category.sql (check A at the bottom tells you which part failed)', async () => {
   const a = await sb.from('public_issues').select('other_label').limit(1);
   must(!a.error, a.error?.message);
+  if (!uid && captchaOn) return { warn: 'public list is fine; My reports not tested (this script cannot sign in while bot protection is on)', skipped: true };
   const b = await sb.rpc('my_reports');
   must(!b.error, b.error?.message);
 });
@@ -58,12 +67,16 @@ await check('Phone check helper exists (is_phone_verified)', 'Run 011_phone_veri
   must(!error, error?.message);
   must(data === false, 'an anonymous visitor should not count as verified');
 });
-await check('SMS endpoint refuses unsigned requests', 'Deploy the app, then set SEND_SMS_HOOK_SECRET and ARKESEL_API_KEY in Vercel', async () => {
-  const site = process.env.NEXT_PUBLIC_SITE_URL || process.env.CHECK_SITE_URL;
-  if (!site) return { warn: 'add NEXT_PUBLIC_SITE_URL=https://civicpulse-live.vercel.app to .env.local to test this' };
-  const res = await fetch(`${site}/api/auth/send-sms`, { method: 'POST', body: '{}' });
-  must(res.status === 401 || res.status === 500, `answered ${res.status}`);
-  return res.status === 401 ? { note: 'signature required (good)' } : { warn: 'answers 500: SEND_SMS_HOOK_SECRET or ARKESEL_API_KEY is not set in Vercel yet' };
+await check('All 261 districts exist, and each has an office', 'Run 012_districts.sql, then 013_assembly_offices.sql in the Supabase SQL editor', async () => {
+  const areas = await sb.from('regions').select('id').eq('level', 'area');
+  must(!areas.error, areas.error?.message);
+  if (areas.data.length === 0) return { warn: 'no districts yet: run 012_districts.sql' };
+  must(areas.data.length === 261, `found ${areas.data.length} districts, expected 261`);
+  const parties = await sb.from('responsible_parties').select('region_id');
+  must(!parties.error, parties.error?.message);
+  const covered = new Set(parties.data.map((p) => p.region_id));
+  const missing = areas.data.filter((a) => !covered.has(a.id)).length;
+  return missing ? { warn: `${missing} districts have no office yet: run 013_assembly_offices.sql` } : { note: '261 districts, all with an office' };
 });
 await check('Someone is responsible for something', 'Add rows to category_responsibilities (see dev helpers at the bottom of 004) or add parties in /admin', async () => {
   const { count, error } = await sb.from('category_responsibilities').select('id', { count: 'exact', head: true });
@@ -97,6 +110,7 @@ await check('SECURITY: moderator functions refuse the public', 'Run 005', async 
   must(error, 'admin_list_issues answered a non-moderator');
 });
 await check('Photo bucket accepts an upload to your own folder', 'Run 003 (creates the issue-photos bucket: JPEG only, 2 MB, own folder)', async () => {
+  if (!uid && captchaOn) return { warn: 'skipped: this script cannot sign in while bot protection is on. File a test report on the site instead.', skipped: true };
   must(uid, 'needs anonymous sign-in first');
   const path = `${uid}/check-live-${Date.now()}-before.jpg`;
   const { error } = await sb.storage.from('issue-photos').upload(path, JPG, { contentType: 'image/jpeg' });

@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { categoryTitle } from '@/lib/categoryTitle';
+import { officesNear } from '@/lib/places';
 import { supabase } from '@/lib/supabase';
 import { compressImage } from '@/lib/compressImage';
 import { linksOf, otherEnd, parseIssueId, suggestions } from '@/lib/relatedIssues';
@@ -20,12 +21,18 @@ async function rpc(name, args) {
   if (error) throw error;
 }
 
-export default function AdminIssue({ issue: i, categoryName, categoryNames = {}, parties, allIssues = [], links = [], onChanged }) {
+export default function AdminIssue({ issue: i, categoryName, categoryNames = {}, parties, regions = [], allIssues = [], links = [], onChanged }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [partyId, setPartyId] = useState(i.party_id ?? '');
   const [remember, setRemember] = useState(!i.other_label); // an "Other" report must not teach the system a rule
   const [newCat, setNewCat] = useState('');
+  const [showAll, setShowAll] = useState(false);
+  // 261 assemblies in one list is unusable: offer the ones near this report first (current choice always stays in the list).
+  const near = officesNear(parties, regions, i.region_id);
+  const base = showAll || near.length === 0 ? parties : near;
+  const current = parties.find((p) => p.id === partyId);
+  const choices = !current || base.some((p) => p.id === current.id) ? base : [current, ...base];
   const title = categoryTitle(categoryName, i.other_label);
   const [file, setFile] = useState(null);
   const [channel, setChannel] = useState('other');
@@ -168,12 +175,13 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
           <div className="row">
             <select value={partyId} onChange={(e) => setPartyId(e.target.value)}>
               <option value="">{A.pickParty}</option>
-              {parties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {choices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             <button type="button" className="secondary" disabled={busy || !partyId}
               onClick={() => run(() => rpc('admin_assign_party', { p_issue: i.id, p_party: partyId, p_remember: remember }))}>
               {A.assign}
             </button>
+            <label className="check"><input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />{A.showAllOffices}</label>
           </div>
           <label className="check"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> {A.remember}</label>
           <div className="row">
