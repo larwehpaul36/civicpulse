@@ -5,6 +5,7 @@ import { categoryTitle } from '@/lib/categoryTitle';
 import { placeLabel, districtsOf, regionOf } from '@/lib/places';
 import { useVerify } from '@/components/PhoneVerify';
 import { needsPhone } from '@/lib/verifyFlow';
+import { sendConfirmation } from '@/lib/confirmations';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { supabase, ensureUser } from '@/lib/supabase';
@@ -14,6 +15,8 @@ import { readCachedRefData, fetchRefData } from '@/lib/refData';
 import { compressImage } from '@/lib/compressImage';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
+import EmergencyNotice from '@/components/EmergencyNotice';
+import { needsEmergencyNotice } from '@/lib/emergency';
 
 const LocationPicker = dynamic(() => import('./LocationPicker'), {
   ssr: false,
@@ -124,7 +127,7 @@ export default function ReportForm() {
   async function confirm(issueId, retried = false) {
     try {
       const user = await ensureUser();
-      const { error } = await supabase.from('confirmations').insert({ issue_id: issueId, user_id: user.id });
+      const { error } = await sendConfirmation(supabase, { issueId, userId: user.id, position: loc });
       if (error && needsPhone(error) && !retried) {
         if (await ask()) return confirm(issueId, true);
         return setError(s.verify.cancelled);
@@ -172,6 +175,7 @@ export default function ReportForm() {
         </div>
         <h2>{title}</h2>
         <p>{body}</p>
+        {needsEmergencyNotice(f.severity) && <EmergencyNotice compact />}
         {hold && <button type="button" onClick={async () => { if (await ask()) syncer.resumeAfterVerification().catch(() => {}); }}>{s.verify.verifyToSend}</button>}
         <p><Link href="/my">{s.mine.getUpdates}</Link></p>
         <button type="button" onClick={reset}>{s.another}</button>
@@ -231,6 +235,7 @@ export default function ReportForm() {
             {Object.entries(s.severityOptions).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </label>
+        {needsEmergencyNotice(f.severity) && <EmergencyNotice />}
         <label>{s.photo}
           <input type="file" accept="image/*" capture="environment" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} aria-required="true" />
           <span className="hint">{s.photoHelp}</span>

@@ -1,5 +1,5 @@
--- CivicPulse: all migrations 001-008 in order. Paste into the Supabase SQL editor on a FRESH project.
--- Generated from the numbered files; edit those, not this.
+-- CivicPulse: all migrations 001-020 in order. Paste into the Supabase SQL editor on a FRESH project.
+-- Generated from the numbered files; edit those, not this. Rebuild: node scripts/build-setup-sql.mjs > supabase/setup_all.sql
 
 -- ===================== 001_civicpulse_schema.sql =====================
 -- CivicPulse core schema (Supabase / Postgres + PostGIS)
@@ -1290,8 +1290,11 @@ select c.slug, g.name->>'en' as shown_under, c.enabled, c.sort from categories c
 select other_label from public_issues limit 1;
 
 -- ===================== 011_phone_verified.sql =====================
--- 011: phone check. Confirming a report needs a verified phone; so does a second report within 24 hours.
--- Run after 009. Safe to run twice. NOT run against a real database by its author: read the checks at the bottom.
+-- 011: phone check, installed but SWITCHED OFF. Run after 009. Safe to run twice.
+-- When switched on, confirming a report needs a verified phone; so does a second report within 24 hours.
+-- Phone login is paused (SMS providers want a registered business), so this file leaves both rules OFF:
+-- nothing changes for residents. Running it again, or running supabase/setup_all.sql again, switches them OFF again.
+-- To switch them ON later (only after phone login works end to end), run 011b_enable_phone_rules.sql.
 -- Phone numbers stay in Supabase's private auth.users table. Nothing here makes a number visible to anyone.
 
 create or replace function is_phone_verified() returns boolean
@@ -1329,10 +1332,14 @@ drop trigger if exists issues_need_phone on issues;
 create trigger issues_need_phone before insert on issues
   for each row execute function require_phone_for_repeat_reports();
 
+-- 3. Leave both rules OFF (phone login is paused). 011b_enable_phone_rules.sql switches them on.
+alter table confirmations disable trigger confirmations_need_phone;
+alter table issues        disable trigger issues_need_phone;
+
 -- ---------------------------------------------------------------------------
 -- CHECKS. Each should run without an error.
--- A) Both triggers exist:
-select tgname from pg_trigger where tgname in ('confirmations_need_phone', 'issues_need_phone') order by tgname;
+-- A) Both triggers exist and are OFF (tgenabled must show D for both):
+select tgname, tgenabled from pg_trigger where tgname in ('confirmations_need_phone', 'issues_need_phone') order by tgname;
 -- B) The helper works (false is correct here, because the SQL editor is not a signed-in person):
 select is_phone_verified();
 
@@ -1680,3 +1687,486 @@ select reg.name as region, count(p.id) as offices
  where reg.level = 'region'
  group by reg.name
  order by reg.name;
+
+-- ===================== 014_lock_down_photo_and_contact_inserts.sql =====================
+-- 014: stop visitors writing to other people's reports. Run after 013. Safe to run twice.
+-- Before this, any signed-in visitor (including an anonymous one) could:
+--   * attach a photo, even an "after" photo, to ANY report (it then shows publicly and satisfies the
+--     "resolved needs an after photo" rule for moderators), and
+--   * add rows to the public contact log of ANY report (for example "response received: yes").
+-- The app only ever needs: a reporter adding the "before" photo to their own report.
+-- Moderators keep working through admin_add_after_photo() and admin_log_contact(), which run with owner rights.
+
+-- 1. Photos: only the reporter, only the "before" kind, only a file inside their own folder.
+drop policy if exists "add photos" on issue_photos;
+drop policy if exists "add own before photo" on issue_photos;
+create policy "add own before photo" on issue_photos for insert to authenticated
+  with check (
+    uploaded_by = auth.uid()
+    and kind = 'before'
+    and (string_to_array(storage_path, '/'))[1] = auth.uid()::text
+    and storage_path !~ '\.\.'
+    and exists (select 1 from issues i where i.id = issue_id and i.reporter_id = auth.uid())
+  );
+
+-- 2. Contact log: no direct writes at all. Moderators use admin_log_contact().
+drop policy if exists "log contact" on contact_attempts;
+
+-- 3. Optional: one "before" photo per report. Check for existing duplicates first:
+--    select issue_id, count(*) from issue_photos where kind = 'before' group by 1 having count(*) > 1;
+--    If that returns no rows, run:
+--    create unique index if not exists issue_photos_one_before on issue_photos (issue_id) where kind = 'before';
+
+-- CHECKS (run each as a normal signed-in user in the app, or see the author's test script):
+select polname from pg_policy where polrelid in ('issue_photos'::regclass, 'contact_attempts'::regclass) order by 1;
+-- expect: add own before photo, contacts readable, photos readable (and NOT: add photos, log contact)
+
+-- ===================== 015_confirmation_quality.sql =====================
+-- 015: make the "3 neighbours confirm" rule harder to fake, without needing phone numbers. Run after 014. Safe to run twice.
+--
+-- Every "I can see this too" is still recorded and still thanks the person. But a confirmation only COUNTS
+-- toward the public number and toward "verified" when ALL of these are true:
+--   1. the account is at least 10 minutes old (or its phone is verified, or it is a moderator),
+--   2. the phone reported being within 1 km of the problem when the button was pressed,
+--   3. the account has fewer than 20 counting confirmations in the last 24 hours.
+-- These rules run in the database, so a script cannot skip them by calling the API directly.
+-- Confirmations made before this migration keep counting.
+--
+-- Privacy: the position sent with a confirmation is used once, inside the trigger, and then thrown away.
+-- It is never stored. Nobody, including moderators, can read where a confirmer was.
+-- To change the limits, edit the three numbers marked LIMIT below and run this file again.
+
+alter table confirmations add column if not exists lat double precision;
+alter table confirmations add column if not exists lng double precision;
+alter table confirmations add column if not exists counts boolean not null default true;
+
+-- Great-circle distance in metres between two points.
+create or replace function distance_metres(lat1 double precision, lng1 double precision, lat2 double precision, lng2 double precision)
+returns double precision language sql immutable as $$
+  select 2 * 6371000 * asin(least(1, sqrt(
+           power(sin(radians(lat2 - lat1) / 2), 2)
+         + cos(radians(lat1)) * cos(radians(lat2)) * power(sin(radians(lng2 - lng1) / 2), 2))))
+$$;
+
+-- The exact spot of a report. For the trigger below ONLY: nobody signed in may call it (exact locations stay private).
+create or replace function issue_latlng(p_issue uuid, out lat double precision, out lng double precision)
+language plpgsql stable security definer set search_path = public, extensions as $$
+begin
+  select st_y(i.location::geometry), st_x(i.location::geometry) into lat, lng from issues i where i.id = p_issue;
+end $$;
+revoke all on function issue_latlng(uuid) from public, anon, authenticated;
+
+create or replace function confirmation_quality() returns trigger
+language plpgsql security definer set search_path = public, auth, extensions as $$
+declare
+  v_trusted boolean;
+  v_near    boolean := false;
+  v_lat     double precision;
+  v_lng     double precision;
+  v_today   int;
+begin
+  -- Internal or SQL-editor writes, and moderators: keep as given (counts by default).
+  if auth.uid() is null or is_moderator() then
+    new.counts := coalesce(new.counts, true);
+    new.lat := null; new.lng := null;
+    return new;
+  end if;
+
+  -- 1. account age, or a verified phone.                                  LIMIT: 10 minutes
+  select (now() - u.created_at) >= interval '10 minutes' or u.phone_confirmed_at is not null
+    into v_trusted from auth.users u where u.id = new.user_id;
+
+  -- 2. close to the problem when pressing the button.                     LIMIT: 1000 metres
+  if new.lat is not null and new.lng is not null
+     and new.lat between -90 and 90 and new.lng between -180 and 180 then
+    select il.lat, il.lng into v_lat, v_lng from issue_latlng(new.issue_id) il;
+    v_near := v_lat is not null and distance_metres(new.lat, new.lng, v_lat, v_lng) <= 1000;
+  end if;
+
+  -- 3. not an account that confirms everything in sight.                  LIMIT: 20 per 24 hours
+  select count(*) into v_today from confirmations c
+   where c.user_id = new.user_id and c.counts and c.created_at > now() - interval '24 hours';
+
+  new.counts := coalesce(v_trusted, false) and v_near and v_today < 20;  -- whatever the app sent is ignored
+  new.lat := null;                                                        -- the position is never stored
+  new.lng := null;
+  return new;
+end $$;
+
+drop trigger if exists confirmations_quality on confirmations;
+create trigger confirmations_quality before insert on confirmations
+  for each row execute function confirmation_quality();
+
+-- Only counting confirmations raise the public number and can verify a report.
+create or replace function on_confirmation() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not new.counts then return new; end if;
+  update issues
+     set confirmation_count = confirmation_count + 1,
+         status = case when status = 'reported' and confirmation_count + 1 >= 3
+                       then 'verified' else status end
+   where id = new.issue_id;
+  return new;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- CHECKS. Each should run without an error.
+-- A) The trigger exists and is on (tgenabled = O):
+select tgname, tgenabled from pg_trigger where tgname = 'confirmations_quality';
+-- B) Nobody signed in can read exact locations through the helper (expect: an error or 'f' for both):
+select has_function_privilege('anon', 'issue_latlng(uuid)', 'execute') as anon_can,
+       has_function_privilege('authenticated', 'issue_latlng(uuid)', 'execute') as signed_in_can;
+-- C) Nothing is stored about where confirmers were (expect 0):
+select count(*) from confirmations where lat is not null or lng is not null;
+
+-- ===================== 016_contact_log_private_notes.sql =====================
+-- 016: keep moderators' private notes on the contact log private. Run after 015. Safe to run twice.
+-- The public report page only shows the channel, whether a response came, and the date. But the table was
+-- readable in full through the API, so anyone could also read the free-text note and who logged the contact.
+-- After this, the public can read only the columns the page uses. Moderators are not affected: they log
+-- contacts through admin_log_contact(), which runs with owner rights.
+
+revoke select on contact_attempts from anon, authenticated;
+grant select (id, issue_id, party_id, channel, response_received, created_at) on contact_attempts to anon, authenticated;
+
+-- CHECK (expect: an error, "permission denied for table contact_attempts"):
+--   set role anon;  select note from contact_attempts limit 1;  reset role;
+-- CHECK (expect: works):
+--   set role anon;  select channel, response_received, created_at from contact_attempts limit 1;  reset role;
+
+-- ===================== 017_merge_anonymous_reports.sql =====================
+-- 017: when someone signs in to an existing email account on a phone that already has reports of its own,
+-- move those reports into the account they signed in to, instead of leaving them behind. Run after 016. Safe to run twice.
+--
+-- How it stays safe: before the sign-in link is sent, the phone (still signed in as its anonymous account) asks for a
+-- one-time secret "ticket". The database keeps only a fingerprint of it. After the person opens the link and is signed in
+-- to their real account, the phone hands the ticket over and the reports move. A ticket works once, for 24 hours, only
+-- from an account that still has no email, and only into an account whose email is confirmed. Nobody else can use it,
+-- because only that phone ever saw it.
+--
+-- What moves: reports, photos, confirmations, flags, "is it fixed?" answers, update notices, push alerts, the update-email address and
+-- directory suggestions. Public numbers do not change, except that a confirmation the person already made with
+-- their other account is not counted twice, and nobody is left "confirming" their own report.
+
+create table if not exists merge_tickets (
+  token_hash text primary key,
+  from_user  uuid not null references auth.users(id) on delete cascade,
+  expires_at timestamptz not null,
+  used_at    timestamptz,
+  created_at timestamptz not null default now()
+);
+alter table merge_tickets enable row level security;   -- no policies: only the functions below can touch it
+revoke all on merge_tickets from anon, authenticated;
+
+-- Step 1, on the old phone while it is still anonymous. Returns the secret ticket (shown once; only its fingerprint is kept).
+create or replace function create_merge_ticket() returns text
+language plpgsql security definer set search_path = public, auth as $$
+declare
+  v_uid uuid := auth.uid();
+  v_ticket text;
+begin
+  if v_uid is null then raise exception 'not_signed_in'; end if;
+  if not exists (select 1 from auth.users u where u.id = v_uid and u.is_anonymous is true) then
+    raise exception 'not_anonymous';                       -- an account that already has an email has nothing to merge
+  end if;
+  delete from merge_tickets where from_user = v_uid;      -- one live ticket per account
+  v_ticket := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
+  insert into merge_tickets (token_hash, from_user, expires_at)
+    values (encode(sha256(convert_to(v_ticket, 'UTF8')), 'hex'), v_uid, now() + interval '24 hours');
+  return v_ticket;
+end $$;
+
+-- Step 2, after signing in to the real account. Returns {"moved": number of reports}.
+create or replace function claim_merge_ticket(p_ticket text) returns jsonb
+language plpgsql security definer set search_path = public, auth as $$
+declare
+  v_to   uuid := auth.uid();
+  v_hash text := encode(sha256(convert_to(coalesce(p_ticket, ''), 'UTF8')), 'hex');
+  v_from uuid;
+  v_moved int := 0;
+begin
+  if v_to is null then raise exception 'not_signed_in'; end if;
+  if not exists (select 1 from auth.users u where u.id = v_to and u.email_confirmed_at is not null) then
+    raise exception 'not_permanent';                       -- only into an account whose email is confirmed
+  end if;
+
+  select t.from_user into v_from from merge_tickets t
+   where t.token_hash = v_hash and t.used_at is null and t.expires_at > now() for update;
+  if v_from is null then raise exception 'ticket_invalid'; end if;
+
+  if v_from = v_to then                                    -- opened where they were already signed in: nothing to move
+    update merge_tickets set used_at = now() where token_hash = v_hash;
+    return jsonb_build_object('moved', 0);
+  end if;
+  if not exists (select 1 from auth.users u where u.id = v_from and u.is_anonymous is true) then
+    raise exception 'ticket_invalid';                      -- the old account is no longer a plain anonymous one
+  end if;
+
+  update issues set reporter_id = v_to where reporter_id = v_from;
+  get diagnostics v_moved = row_count;
+  update issue_photos set uploaded_by = v_to where uploaded_by = v_from;
+
+  -- Confirmations: never count one person twice, and never leave someone confirming their own report.
+  with gone as (
+    delete from confirmations c
+     where (c.user_id = v_from and (exists (select 1 from confirmations b where b.issue_id = c.issue_id and b.user_id = v_to)
+                                    or exists (select 1 from issues i where i.id = c.issue_id and i.reporter_id = v_to)))
+        or (c.user_id = v_to and exists (select 1 from issues i where i.id = c.issue_id and i.reporter_id = v_to))
+    returning c.issue_id, coalesce(c.counts, true) as counted
+  )
+  update issues i set confirmation_count = greatest(0, i.confirmation_count - g.n)
+    from (select issue_id, count(*) filter (where counted) as n from gone group by issue_id) g
+   where i.id = g.issue_id and g.n > 0;
+  update confirmations set user_id = v_to where user_id = v_from;
+
+  delete from flags f where f.user_id = v_from and exists (select 1 from flags b where b.issue_id = f.issue_id and b.user_id = v_to);
+  update flags set user_id = v_to where user_id = v_from;
+
+  if to_regclass('public.fix_checks') is not null then       -- "Is it fixed?" answers (019), when that migration has been run
+    execute 'delete from fix_checks f where f.user_id = $1 and exists (select 1 from fix_checks b where b.issue_id = f.issue_id and b.cycle = f.cycle and b.user_id = $2)' using v_from, v_to;
+    execute 'update fix_checks set user_id = $2 where user_id = $1' using v_from, v_to;
+  end if;
+  update notifications set user_id = v_to where user_id = v_from;
+  update push_subscriptions set user_id = v_to where user_id = v_from;
+  delete from notification_contacts where user_id = v_from and exists (select 1 from notification_contacts where user_id = v_to);
+  update notification_contacts set user_id = v_to where user_id = v_from;
+  update directory_suggestions set suggested_by = v_to where suggested_by = v_from;
+
+  update merge_tickets set used_at = now() where token_hash = v_hash;
+  return jsonb_build_object('moved', v_moved);
+end $$;
+
+revoke all on function create_merge_ticket() from public, anon, authenticated;
+revoke all on function claim_merge_ticket(text) from public, anon, authenticated;
+grant execute on function create_merge_ticket() to authenticated;   -- anonymous sign-ins use this role too
+grant execute on function claim_merge_ticket(text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- CHECKS. Each should run without an error.
+-- A) Only signed-in visitors can call the two functions (expect: anon_can f, signed_in_can t for both):
+select has_function_privilege('anon', 'create_merge_ticket()', 'execute') as anon_can,
+       has_function_privilege('authenticated', 'create_merge_ticket()', 'execute') as signed_in_can,
+       has_function_privilege('anon', 'claim_merge_ticket(text)', 'execute') as anon_can_claim,
+       has_function_privilege('authenticated', 'claim_merge_ticket(text)', 'execute') as signed_in_can_claim;
+-- B) Nobody can read the ticket table through the API (expect: f, f):
+select has_table_privilege('anon', 'merge_tickets', 'select') as anon_reads, has_table_privilege('authenticated', 'merge_tickets', 'select') as signed_in_reads;
+
+-- ===================== 018_auth_email_throttle.sql =====================
+-- 018: spending limits for sign-in emails, with room always kept for moderators. Run after 017. Safe to run twice.
+-- Needed ONLY if you switch on the optional Send Email hook (supabase/functions/auth-email/README.md). Running it alone changes nothing.
+--
+-- Without it, one person could ask for link emails again and again and use up the project's hourly email allowance, which
+-- would also stop moderators' sign-in links. With the hook, every auth email asks this function first:
+--   * moderators are ALWAYS allowed and never count toward the resident limits;
+--   * a resident account may get 4 emails per 24 hours;
+--   * one email address may get 3 emails per 24 hours, from any accounts (so we cannot be used to pester a stranger);
+--   * all residents together may get 30 emails per hour and 300 per day, which leaves moderators headroom.
+-- Change the numbers marked LIMIT below and run this file again.
+-- Privacy: addresses are never stored here, only a one-way fingerprint, and rows are deleted after 3 days.
+
+create table if not exists auth_email_log (
+  id         bigint generated always as identity primary key,
+  user_id    uuid not null,
+  to_hash    text not null,
+  email_type text not null,
+  resident   boolean not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists auth_email_log_user_idx on auth_email_log (user_id, created_at);
+create index if not exists auth_email_log_to_idx   on auth_email_log (to_hash, created_at);
+create index if not exists auth_email_log_time_idx on auth_email_log (created_at);
+alter table auth_email_log enable row level security;   -- no policies: only the function below can touch it
+revoke all on auth_email_log from anon, authenticated;
+
+create or replace function allow_auth_email(p_user uuid, p_to text, p_type text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_user uuid := coalesce(p_user, '00000000-0000-0000-0000-000000000000');
+  v_hash text := encode(sha256(convert_to(lower(btrim(coalesce(p_to, ''))), 'UTF8')), 'hex');
+  v_mod  boolean := exists (select 1 from moderators m where m.user_id = p_user);
+begin
+  perform pg_advisory_xact_lock(7340018);                      -- one at a time, so two requests cannot both slip under a limit
+  delete from auth_email_log where created_at < now() - interval '3 days';
+
+  if not v_mod then
+    if (select count(*) from auth_email_log where user_id = v_user and created_at > now() - interval '24 hours') >= 4 then      -- LIMIT: per account per day
+      return jsonb_build_object('allowed', false, 'reason', 'user');
+    end if;
+    if (select count(*) from auth_email_log where to_hash = v_hash and created_at > now() - interval '24 hours') >= 3 then      -- LIMIT: per address per day
+      return jsonb_build_object('allowed', false, 'reason', 'address');
+    end if;
+    if (select count(*) from auth_email_log where resident and created_at > now() - interval '1 hour') >= 30                    -- LIMIT: all residents, per hour
+       or (select count(*) from auth_email_log where resident and created_at > now() - interval '24 hours') >= 300 then          -- LIMIT: all residents, per day
+      return jsonb_build_object('allowed', false, 'reason', 'busy');
+    end if;
+  end if;
+
+  insert into auth_email_log (user_id, to_hash, email_type, resident) values (v_user, v_hash, coalesce(p_type, ''), not v_mod);
+  return jsonb_build_object('allowed', true, 'reason', case when v_mod then 'moderator' else 'ok' end);
+end $$;
+
+revoke all on function allow_auth_email(uuid, text, text) from public, anon, authenticated;
+grant execute on function allow_auth_email(uuid, text, text) to service_role;   -- the email hook only
+
+-- ---------------------------------------------------------------------------
+-- CHECKS. Each should run without an error.
+-- A) Only the hook (service role) may call it (expect: anon f, signed_in f, service t):
+select has_function_privilege('anon', 'allow_auth_email(uuid,text,text)', 'execute') as anon_can,
+       has_function_privilege('authenticated', 'allow_auth_email(uuid,text,text)', 'execute') as signed_in_can,
+       has_function_privilege('service_role', 'allow_auth_email(uuid,text,text)', 'execute') as service_can;
+-- B) The log never holds an email address (expect 0):
+select count(*) from auth_email_log where to_hash like '%@%';
+
+-- ===================== 019_fix_checks.sql =====================
+-- 019: "Is it fixed?" Once a report is marked resolved, the people who know it best (the person who reported it and
+-- those who confirmed it) can answer Fixed / Partly / Not fixed. If enough of them say it is not really fixed, the report
+-- reopens and goes back to the responsible party with its ORIGINAL sent date, so the waiting time keeps counting against them
+-- on the tracker. Run after 018. Safe to run twice.
+--
+-- Rules (change the numbers marked RULE and run this file again):
+--   * Only the reporter and people who confirmed the report can answer, once each per round (they can change their answer).
+--   * A report reopens when "Not fixed" + "Partly" answers reach 2 AND outnumber "Fixed". If only the reporter ever
+--     took part, 1 is enough.                                                                       -- RULE
+--   * It can reopen automatically at most twice (reopen_count). After that answers are still shown, but a moderator decides.  -- RULE
+-- Nobody's identity is exposed: the public sees only the totals.
+
+alter table issues add column if not exists reopen_count int not null default 0;
+
+create table if not exists fix_checks (
+  issue_id   uuid not null references issues(id) on delete cascade,
+  user_id    uuid not null references auth.users(id),
+  cycle      int  not null,                       -- = issues.reopen_count when the answer was given
+  answer     text not null check (answer in ('fixed', 'partly', 'not_fixed')),
+  created_at timestamptz not null default now(),
+  primary key (issue_id, user_id, cycle)
+);
+alter table fix_checks enable row level security;   -- no policies: only the functions below can touch it
+revoke all on fix_checks from anon, authenticated;
+
+-- Public totals for the current round, never who answered.
+create or replace view public_fix_checks as
+select i.id as issue_id, i.reopen_count,
+       count(c.*) filter (where c.answer = 'fixed')     as fixed,
+       count(c.*) filter (where c.answer = 'partly')    as partly,
+       count(c.*) filter (where c.answer = 'not_fixed') as not_fixed
+  from issues i
+  left join fix_checks c on c.issue_id = i.id and c.cycle = i.reopen_count
+ where i.status <> 'rejected' and i.duplicate_of is null
+ group by i.id, i.reopen_count;
+grant select on public_fix_checks to anon, authenticated;
+
+-- Can this visitor answer, and what did they say? {"eligible": bool, "answer": text|null}
+create or replace function my_fix_check(p_issue uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'eligible', i.status = 'resolved' and auth.uid() is not null
+                and (i.reporter_id = auth.uid() or exists (select 1 from confirmations c where c.issue_id = i.id and c.user_id = auth.uid())),
+    'answer', (select f.answer from fix_checks f where f.issue_id = i.id and f.user_id = auth.uid() and f.cycle = i.reopen_count))
+  from issues i where i.id = p_issue;
+$$;
+
+-- A new notification wording for "reopened" is sent below, so the ordinary "sent" notice must not fire as well.
+create or replace function public.notify_status_change()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.to_status::text = 'reported' then return new; end if;
+  if current_setting('civic.skip_notify', true) = 'on' then return new; end if;
+  begin
+    insert into public.notifications (user_id, issue_id, to_status)
+    select distinct f.user_id, new.issue_id, new.to_status::text
+    from (
+      select reporter_id as user_id from public.issues where id = new.issue_id
+      union
+      select user_id from public.confirmations where issue_id = new.issue_id
+    ) f
+    where f.user_id is not null;
+  exception when others then
+    raise warning 'notify_status_change failed: %', sqlerrm;
+  end;
+  return new;
+end $$;
+
+create or replace function submit_fix_check(p_issue uuid, p_answer text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_uid uuid := auth.uid();
+  i issues%rowtype;
+  v_eligible int;
+  v_bad int; v_good int; v_need int;
+  v_reopened boolean := false;
+begin
+  if v_uid is null then raise exception 'not_signed_in'; end if;
+  if p_answer not in ('fixed', 'partly', 'not_fixed') then raise exception 'bad_answer'; end if;
+
+  select * into i from issues where id = p_issue for update;     -- one answer at a time per report
+  if not found or i.status <> 'resolved' then raise exception 'not_resolved'; end if;
+  if not (i.reporter_id = v_uid or exists (select 1 from confirmations c where c.issue_id = i.id and c.user_id = v_uid)) then
+    raise exception 'not_involved';
+  end if;
+
+  insert into fix_checks (issue_id, user_id, cycle, answer) values (i.id, v_uid, i.reopen_count, p_answer)
+  on conflict (issue_id, user_id, cycle) do update set answer = excluded.answer, created_at = now();
+
+  select count(*) filter (where answer in ('partly', 'not_fixed')), count(*) filter (where answer = 'fixed') into v_bad, v_good
+    from fix_checks where issue_id = i.id and cycle = i.reopen_count;
+  select 1 + count(distinct c.user_id) filter (where c.user_id <> coalesce(i.reporter_id, v_uid)) into v_eligible from confirmations c where c.issue_id = i.id;
+  v_need := least(2, v_eligible);                                                                  -- RULE
+
+  if v_bad >= v_need and v_bad > v_good and i.reopen_count < 2 then                                -- RULE
+    perform set_config('civic.skip_notify', 'on', true);
+    update issues
+       set status = case when party_id is not null then 'sent'::issue_status else 'verified'::issue_status end,
+           resolved_at = null, reopen_count = reopen_count + 1
+     where id = i.id;
+    perform set_config('civic.skip_notify', '', true);
+    update status_log set note = 'reopened_by_neighbours'
+     where id = (select max(l.id) from status_log l where l.issue_id = i.id);
+    insert into notifications (user_id, issue_id, to_status)
+      select distinct f.user_id, i.id, 'reopened'
+        from (select i.reporter_id as user_id union select user_id from confirmations where issue_id = i.id) f
+       where f.user_id is not null;
+    v_reopened := true;
+  end if;
+  return jsonb_build_object('answer', p_answer, 'reopened', v_reopened);
+end $$;
+
+revoke all on function my_fix_check(uuid) from public, anon, authenticated;
+revoke all on function submit_fix_check(uuid, text) from public, anon, authenticated;
+grant execute on function my_fix_check(uuid) to authenticated;
+grant execute on function submit_fix_check(uuid, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- CHECKS. Each should run without an error.
+-- A) Nobody can read who answered (expect: f, f):
+select has_table_privilege('anon', 'fix_checks', 'select') as anon_reads, has_table_privilege('authenticated', 'fix_checks', 'select') as signed_in_reads;
+-- B) The public totals work (expect a row count, no error):
+select count(*) from public_fix_checks;
+
+-- ===================== 020_admin_fix_checks.sql =====================
+-- 020: lets moderators see the "Is it fixed?" answers and how often reports were reopened. Run after 019. Safe to run twice.
+-- Moderators only, and still totals only: who answered stays private even from moderators.
+create or replace function admin_fix_check_summary() returns table (
+  issue_id uuid, reopen_count int, fixed int, partly int, not_fixed int)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_moderator() then raise exception 'not_moderator' using errcode = '42501'; end if;
+  return query
+  select i.id, i.reopen_count,
+         (count(c.*) filter (where c.answer = 'fixed'))::int,
+         (count(c.*) filter (where c.answer = 'partly'))::int,
+         (count(c.*) filter (where c.answer = 'not_fixed'))::int
+    from issues i
+    left join fix_checks c on c.issue_id = i.id and c.cycle = i.reopen_count
+   where i.duplicate_of is null
+   group by i.id, i.reopen_count
+  having i.reopen_count > 0 or count(c.*) > 0;
+end $$;
+revoke all on function admin_fix_check_summary() from public, anon, authenticated;
+grant execute on function admin_fix_check_summary() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- CHECKS. Each should run without an error.
+-- A) The public cannot call it (expect: f, t):
+select has_function_privilege('anon', 'admin_fix_check_summary()', 'execute') as anon_can, has_function_privilege('authenticated', 'admin_fix_check_summary()', 'execute') as signed_in_can;
+-- B) As a moderator in the app, the Admin page now has a "Disputed fixes" tab.

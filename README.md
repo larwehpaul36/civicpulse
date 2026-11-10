@@ -19,11 +19,15 @@ Needs Node 20.9+ (Node 22 recommended).
 | Features (reporting, offline queue, map, tracker, moderator desk, linking, notifications, directory) | Written. 46 unit checks pass. |
 | Frontend v2 ("civic broadcast": live map and live numbers from `public_issues`, tricolor stripe, mobile tab bar with a center camera button, new palette on every page, dark mode, motion) | Done. Unit tests and `next build` pass. Not yet seen by real users. Design preview: Claude artifact canvas "CivicPulse: home concept". |
 | Phase 0 tooling (this folder): `npm run check:live`, Playwright tests, CI, `supabase/setup_all.sql` | Written and syntax-checked. **Playwright and check:live have not been run against a browser or a live project yet.** |
+| Hardening round (migrations 014 to 016, confirmation checks, `/verify` page, clearer Turnstile prompt) | Written. SQL checked by `tests/hardening_stub_test.sql` (39 checks on a stand-in database); new unit tests pass. **Not yet run on your live project: see checklist step 9b.** |
+| Emergency numbers on dangerous reports, open data CSVs (`/data`), monthly report (`/monthly`), tracker now reads all pages (`docs/emergency-open-data-monthly.md`) | Written; logic unit-tested, pages not built or run yet. No migration needed. |
+| "Is it fixed?" neighbour check and reopening (`docs/fix-check.md`) | Written; database logic tested on a stand-in Postgres, screen not run against a live project. Needs `019_fix_checks.sql`. |
+| Optional email sign-in (`/my`: keep reports if you change phone) | Written, off by default (`NEXT_PUBLIC_EMAIL_ACCOUNTS`). Logic unit-tested; the screen and Supabase's email flow have **not** been run against a live project. Setup: `docs/email-signin-setup.md`. Includes report-merging on sign-in (017) and optional email limits with a moderator reserve (018 + `supabase/functions/auth-email`), both tested only on stand-ins. |
 | Live Supabase + Vercel deployment | **Not done. This is the next thing.** |
 | Everything after Phase 0 | See the roadmap below. |
 
 ### Phase 0 checklist: make it real (tick these)
-- [x] 1. Create a Supabase project. SQL editor: paste and run `supabase/setup_all.sql` (same as running 001 to 008 in order).
+- [x] 1. Create a Supabase project. SQL editor: paste and run `supabase/setup_all.sql` (same as running 001 to 016 in order; there is no 010). `011b_enable_phone_rules.sql` is deliberately not in it.
 - [x] 2. Authentication > Providers: enable **Anonymous sign-ins**. Authentication > URL Configuration: set Site URL, add `http://localhost:3000/admin` and your Vercel URL to the redirect list.
 - [x] 3. Copy `.env.local.example` to `.env.local`, fill in the project URL and anon key.
 - [x] 4. `npm install`, then `npm run check:live`. Fix every FAIL it prints (each line says which migration or setting to fix). **Do not skip the two PRIVACY lines.**
@@ -32,6 +36,8 @@ Needs Node 20.9+ (Node 22 recommended).
 - [x] 7. Run the full loop by hand: report, confirm (from a second browser profile), assign party in /admin, mark sent, add after photo, mark resolved, check /tracker.
 - [x] 8. Push to GitHub. CI (`.github/workflows/ci.yml`) runs unit tests, build, `npm audit` and the smoke tests.
 - [ ] 9. Deploy to Vercel (import the repo, add the same env vars, redeploy). Add the Vercel URL to Supabase's redirect list.
+- [ ] 9b. **Hardening, in this order.** (1) Deploy the app first (it also works before the migrations). (2) In the SQL editor run `014_lock_down_photo_and_contact_inserts.sql`, `015_confirmation_quality.sql`, `016_contact_log_private_notes.sql`. (3) Confirm the phone rules are off: `select tgname, tgenabled from pg_trigger where tgname in ('confirmations_need_phone','issues_need_phone');` must show `D` twice. (4) `npm run check:live`: every PRIVACY and SECURITY line must PASS. (5) On a phone: confirm a report while standing near it (it counts); confirm one from a different place (it is saved but does not count).
+- [ ] 9c. Optional, when you want residents to keep reports across phones: follow `docs/email-signin-setup.md` (custom SMTP first, then the flag, then its test).
 - [ ] 10. `npm run playwright:install` once, then `npm run test:e2e` (smoke, no backend needed) and `npm run test:e2e:live` (files a real report; use a TEST Supabase project).
 - [ ] 11. On a real phone, over HTTPS: open the site online once, switch to airplane mode, make a report, switch signal back on, watch it send. Then test push notifications (add to Home Screen first on iPhone).
 - [ ] 12. Test with 5 to 10 real residents. **Done when** 10+ real reports, 2+ categories, one case sent to a real responsible party.
@@ -43,7 +49,9 @@ Needs Node 20.9+ (Node 22 recommended).
 |---|---|
 | `npm run dev` | Dev server (service worker is off in dev). |
 | `npm run build && npm start` | Production build; the only mode where the service worker and push run. |
-| `npm test` | 46 unit checks (offline queue, service worker rules, notifications, directory, related issues). |
+| `npm test` | 105 unit checks (offline queue, service worker rules, notifications, directory, related issues, phone and SMS hook, confirmations, Turnstile, email accounts). |
+| `tests/hardening_stub_test.sql` | 39 database checks for 011, 011b, 014, 015, 016 on a throwaway Postgres (no PostGIS needed). Run line is in its first lines. |
+| `node scripts/build-setup-sql.mjs > supabase/setup_all.sql` | Rebuilds the one-paste setup file from the numbered migrations. Never edit `setup_all.sql` by hand. |
 | `npm run check:live` | Checks your live Supabase project with only the public key: sign-in, seed data, privacy, permissions, storage. |
 | `npm run test:e2e` | Playwright smoke tests against a production build (no backend needed). |
 | `npm run test:e2e:live` | Playwright test that files a real report. Uses your `.env.local`. |
@@ -54,7 +62,7 @@ Needs Node 20.9+ (Node 22 recommended).
 - `components/`: `Nav` (top bar; floating bottom tabs on phones), `ReportForm`, `LocationPicker`, `IssuesMap`, `SyncBanner`, admin and directory components.
 - `lib/`: `supabase.js`, offline queue (`offlineQueue`, `syncQueue`, `sync`, `useOutbox`), `strings.js` (all UI text), `homeStrings.js` (home page text; merge into strings.js when translating), `notifications`, `directory`, `relatedIssues`.
 - `public/sw.js`: service worker. `supabase/functions/notify/`: push/email sender. `supabase/setup_all.sql`: all migrations in one paste.
-- `001` to `008_*.sql` (project root): the migrations, edit these and regenerate `setup_all.sql`.
+- `001` to `016_*.sql` (project root): the migrations, edit these and regenerate `setup_all.sql`. `011b_enable_phone_rules.sql` is an opt-in switch for phone login.
 - `HANDOVER.md`: detailed decisions, per-phase notes and the long **Known issues** list. Read it.
 
 ## Rules the code follows (keep them)
@@ -67,7 +75,7 @@ Needs Node 20.9+ (Node 22 recommended).
 
 ## Roadmap after Phase 0
 - **Phase 1, attractive (weeks 2 to 4):** 3-step report flow (photo, spot, details) with progress and a success celebration; live stats strip on the home page; share card (OG image) for every report; tracker redesign with sparklines; one self-hosted font; accessibility audit.
-- **Phase 2, trustworthy (weeks 4 to 6):** phone-number login + Cloudflare Turnstile; blur faces and strip EXIF from photos; tracker shows median days, backlog and resolution rate, and counts linked duplicates once; right of reply for responsible parties.
+- **Phase 2, trustworthy (weeks 4 to 6):** phone-number login (paused: SMS providers need a registered business; Turnstile and the 015 confirmation checks are in place instead); blur faces and strip EXIF from photos; tracker shows median days, backlog and resolution rate, and counts linked duplicates once; right of reply for responsible parties.
 - **Phase 3, spread (months 2 to 3):** WhatsApp intake and updates; Twi, Ga, Ewe; automatic escalation after N days without response; public API and CSV/GeoJSON export; partner with one assembly, one radio station, one NGO.
 - **Phase 4, scale (month 3 on):** TypeScript; server-rendered public pages; vector map tiles with clustering; Sentry and analytics; AI-assisted triage with a human in the loop; second city.
 - **Metrics from day one:** reports per week; % confirmed by 3+ neighbors; % sent to a responsible party; median days to first response; % resolved; returning users.

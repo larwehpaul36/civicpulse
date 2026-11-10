@@ -18,6 +18,9 @@ It cannot stop a determined person using a real browser, so keep moderating.
    - open `/admin` and request the moderator sign-in link, then check the email arrives
 6. **If anything goes wrong**, switch CAPTCHA protection off in Supabase (instant). The app works as before.
 
+## What residents see
+Usually nothing. When Cloudflare is unsure, a short message ("Quick check: tap below...") appears above its small box, and the app waits up to 90 seconds for the tap (20 seconds when the check is silent). Reports are always kept on the phone and retried, so an ignored check never loses one.
+
 ## Rate limits: leave the default
 Supabase > Authentication > Rate Limits has a limit on anonymous sign-ins per network address (30 per hour by default). Do not lower it much. Mobile networks in Ghana often put many people behind one shared address, so a low limit would block real residents on busy days. The bot check does this job better.
 

@@ -6,8 +6,12 @@ import { supabase, ensureUser } from '@/lib/supabase';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import ShareButton from '@/components/ShareButton';
+import FixCheck from '@/components/FixCheck';
+import EmergencyNotice from '@/components/EmergencyNotice';
+import { needsEmergencyNotice } from '@/lib/emergency';
 import { useVerify } from '@/components/PhoneVerify';
 import { needsPhone } from '@/lib/verifyFlow';
+import { getPosition, sendConfirmation } from '@/lib/confirmations';
 import { categoryTitle } from '@/lib/categoryTitle';
 
 const photoUrl = (path) => supabase.storage.from('issue-photos').getPublicUrl(path).data.publicUrl;
@@ -54,14 +58,15 @@ export default function IssuePage() {
 
   async function confirm(retried = false) {
     try {
-      const user = await ensureUser();
-      const { error } = await supabase.from('confirmations').insert({ issue_id: id, user_id: user.id });
+      // The phone's position is used once by the database to check the person is near the problem, then thrown away.
+      const [user, position] = await Promise.all([ensureUser(), getPosition()]);
+      const { error, counted } = await sendConfirmation(supabase, { issueId: id, userId: user.id, position });
       if (error && needsPhone(error) && !retried) {
         if (await ask()) return confirm(true); // phone confirmed: try once more
         return setMsg(s.verify.cancelled);
       }
       if (error) return setMsg(error.code === '23505' ? s.seeThanks : error.code === '42501' ? s.ownReport : s.failed);
-      setMsg(s.seeThanks);
+      setMsg(counted ? s.seeThanks : s.seeRecorded);
       load();
     } catch { setMsg(s.failed); }
   }
@@ -99,6 +104,7 @@ export default function IssuePage() {
       <p className="hint">{s.daysOpen(issue.days_open)} · {s.confirmations(issue.confirmation_count)}</p>
       <p><strong>{s.responsibleParty}:</strong> {party?.name ?? s.notAssigned}</p>
       {waiting !== null && <p className="warn">{s.sentAgo(waiting)}</p>}
+      {needsEmergencyNotice(issue.severity, issue.status) && <EmergencyNotice compact />}
       <ShareButton title={categoryTitle(label(cat?.name), issue.other_label)} text={s.share.line(categoryTitle(label(cat?.name), issue.other_label), issue.status, issue.days_open)} />
 
       <div className="photos">
@@ -116,6 +122,7 @@ export default function IssuePage() {
         <p><button type="button" onClick={() => confirm()}>{s.iSeeThis}</button></p>
       )}
       {msg && <p aria-live="polite"><strong>{msg}</strong></p>}
+      {issue.status === 'resolved' && <FixCheck issueId={id} onReopened={load} />}
 
       {related.length > 0 && (
         <>

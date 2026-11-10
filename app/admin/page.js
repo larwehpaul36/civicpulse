@@ -7,6 +7,7 @@ import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import AdminIssue from '@/components/AdminIssue';
 import AdminSuggestion from '@/components/AdminSuggestion';
+import { isDisputed, mergeFixChecks } from '@/lib/adminFix';
 
 const A = s.admin;
 const RANK = { hazard: 0, high: 1, medium: 2, low: 3 };
@@ -16,6 +17,7 @@ const VIEWS = {
   flagged: (i) => i.flag_count > 0 && i.status !== 'rejected',
   resolved: (i) => i.status === 'resolved',
   rejected: (i) => i.status === 'rejected',
+  disputed: isDisputed,
 };
 
 function SignIn() {
@@ -111,15 +113,16 @@ export default function AdminPage() {
   const signedIn = session && !session.user.is_anonymous;
 
   const refresh = useCallback(async () => {
-    const [i, c, p, r, l, sg] = await Promise.all([
+    const [i, c, p, r, l, sg, fx] = await Promise.all([
       supabase.rpc('admin_list_issues'),
       supabase.from('categories').select('id, name'),
       supabase.from('responsible_parties').select('id, name, region_id').eq('verified', true).order('name'),
       supabase.from('regions').select('id, name, level, parent_id').in('level', ['region', 'city', 'area']).order('name'),
       supabase.from('issue_links').select('issue_a, issue_b, relation'),
       supabase.rpc('admin_list_suggestions'),   // empty until 008 has been run
+      supabase.rpc('admin_fix_check_summary'),  // empty until 019 and 020 have been run
     ]);
-    setIssues(i.data ?? []); setCats(c.data ?? []); setParties(p.data ?? []); setRegions(r.data ?? []); setLinks(l.data ?? []); setSuggestions(Array.isArray(sg.data) ? sg.data : []);
+    setIssues(mergeFixChecks(i.data ?? [], fx.data)); setCats(c.data ?? []); setParties(p.data ?? []); setRegions(r.data ?? []); setLinks(l.data ?? []); setSuggestions(Array.isArray(sg.data) ? sg.data : []);
   }, []);
 
   useEffect(() => {

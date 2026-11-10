@@ -1,5 +1,8 @@
--- 011: phone check. Confirming a report needs a verified phone; so does a second report within 24 hours.
--- Run after 009. Safe to run twice. NOT run against a real database by its author: read the checks at the bottom.
+-- 011: phone check, installed but SWITCHED OFF. Run after 009. Safe to run twice.
+-- When switched on, confirming a report needs a verified phone; so does a second report within 24 hours.
+-- Phone login is paused (SMS providers want a registered business), so this file leaves both rules OFF:
+-- nothing changes for residents. Running it again, or running supabase/setup_all.sql again, switches them OFF again.
+-- To switch them ON later (only after phone login works end to end), run 011b_enable_phone_rules.sql.
 -- Phone numbers stay in Supabase's private auth.users table. Nothing here makes a number visible to anyone.
 
 create or replace function is_phone_verified() returns boolean
@@ -37,9 +40,13 @@ drop trigger if exists issues_need_phone on issues;
 create trigger issues_need_phone before insert on issues
   for each row execute function require_phone_for_repeat_reports();
 
+-- 3. Leave both rules OFF (phone login is paused). 011b_enable_phone_rules.sql switches them on.
+alter table confirmations disable trigger confirmations_need_phone;
+alter table issues        disable trigger issues_need_phone;
+
 -- ---------------------------------------------------------------------------
 -- CHECKS. Each should run without an error.
--- A) Both triggers exist:
-select tgname from pg_trigger where tgname in ('confirmations_need_phone', 'issues_need_phone') order by tgname;
+-- A) Both triggers exist and are OFF (tgenabled must show D for both):
+select tgname, tgenabled from pg_trigger where tgname in ('confirmations_need_phone', 'issues_need_phone') order by tgname;
 -- B) The helper works (false is correct here, because the SQL editor is not a signed-in person):
 select is_phone_verified();

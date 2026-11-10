@@ -62,10 +62,48 @@ await check('Public list exposes other_label, and My reports still works', 'Run 
   const b = await sb.rpc('my_reports');
   must(!b.error, b.error?.message);
 });
-await check('Phone check helper exists (is_phone_verified)', 'Run 011_phone_verified.sql in the Supabase SQL editor', async () => {
+await check('Phone check helper exists (is_phone_verified). Its two rules stay OFF until 011b is run', 'Run 011_phone_verified.sql in the Supabase SQL editor (it leaves the rules off). Confirm: select tgname, tgenabled from pg_trigger where tgname in (\'confirmations_need_phone\',\'issues_need_phone\'); both must show D while phone login is paused', async () => {
   const { data, error } = await sb.rpc('is_phone_verified');
   must(!error, error?.message);
   must(data === false, 'an anonymous visitor should not count as verified');
+});
+await check('Confirmations are checked for account age, distance and daily cap (015)', 'Run 015_confirmation_quality.sql in the Supabase SQL editor. Deploy the app BEFORE running it: the new app also works without it', async () => {
+  const { error } = await sb.from('confirmations').select('counts').limit(1);
+  must(!error, error?.message);
+});
+await check('PRIVACY: nobody can read exact locations through issue_latlng', 'Run 015 again: it closes issue_latlng() to everyone. Until then exact locations can leak', async () => {
+  const { error } = await sb.rpc('issue_latlng', { p_issue: '00000000-0000-0000-0000-000000000000' });
+  must(error, 'issue_latlng answered the public');
+});
+await check('PRIVACY: moderators\' contact-log notes are hidden from the public', 'Run 016_contact_log_private_notes.sql', async () => {
+  const { error } = await sb.from('contact_attempts').select('note').limit(1);
+  must(error, 'anyone can read the notes on the contact log');
+  const ok = await sb.from('contact_attempts').select('channel, response_received, created_at').limit(1);
+  must(!ok.error, `the public report page needs these columns: ${ok.error?.message}`);
+});
+await check('Reports can follow a resident who signs in on a new phone (017)', 'Run 017_merge_anonymous_reports.sql (needed only if NEXT_PUBLIC_EMAIL_ACCOUNTS=1)', async () => {
+  const r = await sb.rpc('claim_merge_ticket', { p_ticket: 'check-live' });
+  if (r.error && /Could not find the function/i.test(r.error.message)) return { warn: '017 not run yet: only needed for email sign-in' };
+  must(r.error, 'claim_merge_ticket answered a signed-out visitor');
+  const t = await sb.from('merge_tickets').select('token_hash').limit(1);
+  must(t.error, 'anyone can read the merge ticket table');
+});
+await check('"Is it fixed?" answers work and stay private (019)', 'Run 019_fix_checks.sql in the Supabase SQL editor', async () => {
+  const v = await sb.from('public_fix_checks').select('issue_id, reopen_count').limit(1);
+  if (v.error && /does not exist|schema cache|Could not find/i.test(v.error.message)) return { warn: '019 not run yet: neighbours cannot say whether a fix is real' };
+  must(!v.error, `public_fix_checks: ${v.error?.message}`);
+  const t = await sb.from('fix_checks').select('user_id').limit(1);
+  must(t.error, 'anyone can read who answered');
+});
+await check('Moderators can see "Is it fixed?" totals (020)', 'Run 020_admin_fix_checks.sql after 019', async () => {
+  const r = await sb.rpc('admin_fix_check_summary');
+  if (r.error && /Could not find the function|does not exist/i.test(r.error.message)) return { warn: '020 not run yet (needs 019 first)' };
+  must(r.error, 'admin_fix_check_summary answered a signed-out visitor');
+});
+await check('The tracker can read more than 1000 reports (paging)', 'Check public_issues is readable', async () => {
+  const r = await sb.from('public_issues').select('id', { count: 'exact', head: true });
+  must(!r.error, `public_issues: ${r.error?.message}`);
+  if (r.count > 1000) return { warn: `${r.count} reports: the tracker, /monthly and /data read them page by page, as they should` };
 });
 await check('All 261 districts exist, and each has an office', 'Run 012_districts.sql, then 013_assembly_offices.sql in the Supabase SQL editor', async () => {
   const areas = await sb.from('regions').select('id').eq('level', 'area');

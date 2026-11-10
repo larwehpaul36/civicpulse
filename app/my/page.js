@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { loadMine, markAllRead } from '@/lib/notifications';
@@ -8,6 +8,7 @@ import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import { categoryTitle } from '@/lib/categoryTitle';
 import NotificationSettings from '@/components/NotificationSettings';
+import KeepAccount from '@/components/KeepAccount';
 
 const when = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -16,6 +17,22 @@ export default function MyReportsPage() {
   const [data, setData] = useState({ loading: true, failed: false, reports: [], updates: [], unread: new Set() });
   const [cats, setCats] = useState([]);
   const waiting = items.filter((i) => i.status === 'pending');
+  const [accountKey, setAccountKey] = useState(0);
+  const lastUser = useRef(undefined);
+
+  // If the account changes (a sign-in link was opened, or the person signed out), clear the lists at once so one person's
+  // reports are never left on screen for the next, then load the new account's.
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const id = session?.user?.id ?? null;
+      if (lastUser.current !== undefined && lastUser.current !== id) {
+        setData({ loading: true, failed: false, reports: [], updates: [], unread: new Set() });
+        setAccountKey((k) => k + 1);
+      }
+      lastUser.current = id;
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Reload when a saved report finishes sending, so it moves from "waiting" to "sent".
   useEffect(() => {
@@ -34,7 +51,7 @@ export default function MyReportsPage() {
       }
     })();
     return () => { alive = false; };
-  }, [waiting.length]);
+  }, [waiting.length, accountKey]);
 
   const catName = useMemo(() => Object.fromEntries(cats.map((c) => [c.id, label(c.name)])), [cats]);
   const freshIssues = useMemo(
@@ -100,6 +117,7 @@ export default function MyReportsPage() {
         ))}
       </ul>
 
+      <KeepAccount hasReports={data.reports.length > 0 || waiting.length > 0} onMerged={() => setAccountKey((k) => k + 1)} />
       <NotificationSettings />
     </main>
   );

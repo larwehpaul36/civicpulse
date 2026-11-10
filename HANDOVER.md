@@ -1,6 +1,70 @@
 # CivicPulse: handover note
 
-Last updated: 16 Oct 2026 (phase 7 added: community directory and two security fixes; phase 6 notifications; phase 5 related-report linking; phase 4 the offline queue). Paste the "Prompt for the new chat" section (bottom) into a new chat, and attach this file plus the SQL files (001-008).
+Last updated: 7 Nov 2026. **Read "START HERE" first**: it is the current state. The rest of the file is the older history (phases 1-7) and is still accurate for those parts. Paste the "Prompt for the new chat" section (bottom) into a new chat and attach this file, the whole project zip (or at least the SQL files 001-020), and your `.env.local` NAMES only (never the secret values).
+
+## START HERE (state on 7 Nov 2026)
+
+### What exists now, beyond phases 1-7
+Everything below is written and tested only on stand-ins (a throwaway Postgres without PostGIS or Supabase, and Node). **None of it has been run against your live Supabase or Vercel project.** Run `npm run check:live` (it has a line for each) before trusting any of it.
+
+| Migration | What it does | Needed for |
+|---|---|---|
+| 009 other category | "Other" problem type with a typed label | already live |
+| 011 / 011b phone rules | 011 installs the phone-verification rules but leaves them OFF. 011b switches them ON. | **Do NOT run 011b yet** (waiting for the Arkesel key) |
+| 012, 013 | all 261 districts and their assembly offices | already live |
+| 014 | stops strangers adding photos or contact-log rows to other people's reports | security fix, run it |
+| 015 | confirmations count only if the person is within about 1 km, the account is not brand new (or has a verified phone), and under 20 a day; the app cannot force "counts" | run it (deploy the app first) |
+| 016 | moderators' contact-log notes are private | run it |
+| 017 | merge an anonymous phone's reports (and photos, confirmations, flags, "is it fixed?" answers, alerts, update-email, suggestions) into an email account it signs in to | only if email sign-in is on |
+| 018 | spending limits for sign-in emails, moderators always allowed | only with the optional email hook |
+| 019 | "Is it fixed?": reporter + confirmers answer Fixed / Partly / Not fixed on resolved reports; two disputes that outnumber "fixed" reopen it (max 2 automatic reopenings), original sent date kept | run it |
+| 020 | moderators see the answer totals and reopen counts (a "Disputed fixes" tab in /admin) | after 019 |
+
+`supabase/setup_all.sql` is generated from the numbered files (`node scripts/build-setup-sql.mjs . > supabase/setup_all.sql`); it skips `011b`. Paste it only into a FRESH project. For the live project run the single files you are missing, in order.
+
+### Added after 020 (no migration needed): see `docs/emergency-open-data-monthly.md`
+- Emergency signposting (`lib/emergency.js`, `components/EmergencyNotice.js`): shown on "Dangerous right now" reports. Numbers checked 7 Nov 2026; re-check yearly; the NADMO number is the headquarters line.
+- Open data: `/data`, `/data/reports.csv`, `/data/offices.csv` (`lib/openData.js`, `lib/openDataServer.js`, `lib/fetchAll.js`). Public columns only. **Owner decisions pending:** a formal licence wording, and whether to publish lat/lng.
+- Monthly report: `/monthly` (`lib/monthly.js`): slowest at month end, most improved, most fixes, with honest limits on screen.
+- Bug found and fixed: the tracker's `limit(5000)` was capped at 1000 rows by Supabase; it now pages through everything with `fetchAll`.
+- Tests: `tests/emergency.test.mjs`, `tests/openData.test.mjs`, `tests/monthly.test.mjs`. Pages and routes not built or run (no build tools in the sandbox): run `npm run build`.
+- Remove "emergency signposting" and "open data CSV and a monthly report" from the next-feature list below; they are done.
+
+### Feature switches (all default OFF in `.env.local.example`)
+- `NEXT_PUBLIC_EMAIL_ACCOUNTS=1`: optional email sign-in on `/my` ("keep your reports if you change phone"). Needs custom SMTP first (Supabase's built-in mail only reaches team members) and "Allow manual linking". Guide: `docs/email-signin-setup.md`. It is OFF; keep it off until you have done that guide.
+- `NEXT_PUBLIC_EMAIL_NOTICES=1`: status emails (needs the `notify` function and Resend).
+- Optional Send Email hook `supabase/functions/auth-email` + 018: a firm limit on sign-in emails so residents cannot use up the allowance moderators need. Guide: its README.
+- Phone verification (Arkesel text codes): **waiting for the Arkesel API key.** Guides: `docs/phone-login-setup.md`, `docs/turnstile-setup.md`. Cloudflare Turnstile is on.
+
+### Decisions made in this round
+- Reporting stays open: no account, email or phone needed. Email is optional and gives recovery, not trust. Only a verified phone will count as trust once phone rules are on.
+- Confirmations are about quality: nearby, not brand-new, capped per day. Moderators are exempt.
+- Adding an email that already has an account quietly sends a sign-in link and shows the same message, so the screen never reveals which addresses have accounts.
+- Signing in on a phone that has reports brings them along using a one-time ticket (only for the address it was made for, once, 24 hours).
+- A "reopened" report goes back to the office with its original sent date, so the waiting time keeps counting on the tracker.
+- Who answered an "is it fixed?" question is never shown, even to moderators; only totals.
+
+### Known gaps and risks (be honest about these)
+1. **Phone + email overlap (only matters once phone rules are on):** if a phone-verified anonymous phone signs in to an email account, its reports merge but the verified number stays on the old anonymous account, so the email account is unverified and the person must verify again (the number may be refused as already used). Also, if a number already belongs to another account, the phone check signs in to that account and this phone's reports are left behind (no merge step on that path). Planned fix: ship an opt-in file next to 011b that moves `phone`/`phone_confirmed_at` in the merge and adds a phone-path ticket merge. Do it when the Arkesel key exists.
+2. Not run against a live project: the email flow, the merge, the email hook, "Is it fixed?", the moderator tab. In particular unknown until tested: what Supabase's `is_anonymous` flag becomes after confirming an email (the app decides "signed in" from the confirmed email instead), how Supabase shows a 429 from the email hook, and whether Supabase's own hourly email limit also counts hook-sent mail.
+3. Not done: face and number-plate blurring on photos; a CI job that runs the SQL tests (they need Postgres; the command is below); the moderator screen cannot yet reopen by "bulk"; reports never expire.
+4. Confirmations still need a phone with location access to count; people without GPS are recorded but do not count until their account is a few minutes old.
+
+### How to run the tests
+- Unit tests: `npm test` (`node --test tests/*.test.mjs`). In the sandbox where this was built the npm registry was unreachable, so `share` and `syncQueue` fail only because their packages are missing. On your machine, after `npm install`, all should pass.
+- SQL checks (no PostGIS needed): create an empty Postgres 16 database, then from the project root `psql -v ON_ERROR_STOP=1 -q -d DBNAME -f tests/hardening_stub_test.sql`. It prints PASS/FAIL per check (121 checks; the new emergency, open-data and monthly features are Node tests only) and errors if any fail. It covers 011, 011b, 014-020 with stand-ins; the real schema tests are `tests/schema_smoke_test.sql` (needs PostGIS) and the other `*_stub_test.sql` files.
+- Also run `npm run lint:a11y`, `npm run build` and `npm run test:e2e` on your machine: they were not run in the build sandbox.
+
+### Suggested next steps (in order)
+1. On your Supabase: run 014, 015, 016, 019, 020 (015 after deploying the app), then `npm run check:live` and fix anything it flags. Leave 011b alone.
+2. Deploy to Vercel and test one full loop with real reports: report, confirm from another phone near it, mark sent, resolve with an after photo, answer "not fixed" twice and watch it reopen.
+3. Decide on email sign-in: if yes, do `docs/email-signin-setup.md` (SMTP first), run 017, set the flag, test on a real phone. Optional: the email hook + 018.
+4. When the Arkesel key arrives: set up the SMS hook, test codes, then add the phone+email merge change (gap 1), then run 011b.
+5. Next features (from the FixMyStreet comparison): face and plate blurring; right of reply for offices; an office dashboard; WhatsApp or USSD intake; local languages and voice notes.
+
+### Zips delivered in the last chat
+`CivicPulse-Safe-hardened.zip` (hardening), `CivicPulse-Safe-email-signin.zip`, `CivicPulse-Safe-merge-and-limits.zip` (017, 018, email hook), `CivicPulse-Safe-fix-check.zip` (019), and the latest one with 020 and this note. The latest zip contains everything from the earlier ones.
+
 
 ## What this is
 A civic accountability app for any local neighborhood problem (waste, choked gutters, streetlights, potholes, later water and safety). Residents report with a photo and location. The core feature, not yet built, is a public tracker showing whether and how fast each case gets fixed, so visibility pressures the responsible party. Built by an IT student in Ghana, inspired by the phrase "Remember the power we hold to change the world as we see fit." Intended to work nationwide and in other countries later.
@@ -74,7 +138,7 @@ NOT BUILT:
 - Untested end to end. First run may need fixes to SQL or JS.
 - `category_responsibilities` is empty, so new issues get no responsible party until rows are added (see the dev helpers at the bottom of 004). Matching now walks up the region tree, so one row for "Greater Accra" covers every city inside it.
 - The tracker stays empty until at least one case is marked `sent` (which needs a responsible party and moderator action).
-- Anonymous sign-ins are cheap to create, so the 3-confirmation rule can be gamed. Review cases manually before escalating. Consider phone-number login later.
+- Anonymous sign-ins are cheap to create, so the 3-confirmation rule could be gamed. Since 015, a confirmation counts only from an account at least 10 minutes old that is within 1 km of the report, with a cap of 20 per day, so gaming it takes real effort per fake vote, but a determined person with a phone and time can still do it. Review cases manually before escalating. GPS position can be faked by a technical person.
 - Users cannot read exact `location` or `public_location` from the `issues` table by design. Read locations through the `public_issues` view.
 - Issue updates are blocked for users on purpose. Status changes currently happen from the Supabase dashboard or service role.
 - Photos are in a public bucket. Privacy depends on users avoiding faces and house numbers. Consider face blurring later.
@@ -101,6 +165,33 @@ NOT BUILT:
 - The escalation message contains the exact map location. That is intended (the responsible party must find the spot), but it goes only to the party the moderator picks.
 - Moderators are trusted fully: they can see exact locations and change any case. Keep the list short.
 
+## Hardening round (5 Nov 2026)
+Found by reading the code with a reviewer's eye. All of it was tested on a throwaway Postgres (`tests/hardening_stub_test.sql`, 39 checks) and with unit tests; **none of it has been run on the live Supabase project yet.**
+- **014 (security hole):** the original policies let any signed-in visitor, anonymous ones included, attach a photo (even an "after" photo) to ANY report and add rows to ANY report's public contact log. Now only the reporter can add the "before" photo, into their own folder, to their own report. Moderators still use `admin_add_after_photo` and `admin_log_contact`.
+- **011 / 011b (phone rules):** 011 used to switch the two phone rules ON, which would have blocked every confirmation while phone login is paused. It now installs them switched OFF, and re-running it (or `setup_all.sql`) switches them off again. `011b_enable_phone_rules.sql` is the only thing that turns them on, and is not in `setup_all.sql`.
+- **015 (fake confirmations without SMS):** every confirmation is saved, but it only COUNTS toward the public number and toward "verified" when the account is 10 minutes old (or phone-verified), the phone is within 1 km of the report when the button is pressed, and the account has fewer than 20 counting confirmations in 24 hours. Enforced in the database. The position is used once inside the trigger and never stored. Old confirmations keep counting. Limits are marked `LIMIT` in the file. New app code: `lib/confirmations.js`; it falls back to the old plain confirmation if 015 has not been run yet, so deploy the app first.
+- **016:** the contact log's free-text note and "who logged it" were readable by anyone through the API. Now the public gets only channel, response and date.
+- **App:** `/verify` page (the phone guide pointed to it but it did not exist), Turnstile shows a one-line explanation when it needs a tap and waits 90 s instead of 20, privacy notice now covers the anonymous account and the one-time position check, `check:live` has new lines for 015, `issue_latlng` and the contact notes.
+- **Not done:** face blurring; a Postgres job in CI for the SQL tests; confirmations still need signal.
+
+## Email sign-in (added after the hardening round)
+- Optional and OFF until `NEXT_PUBLIC_EMAIL_ACCOUNTS=1`. Setup, including the custom SMTP it cannot work without, is in `docs/email-signin-setup.md`.
+- How it works: on `/my`, "Keep your reports if you change phone" calls `supabase.auth.updateUser({ email })` on the resident's existing anonymous account, so the user id and every report stay. Opening the emailed link confirms it. On a new phone, "Already added your email? Sign in" calls `signInWithOtp({ shouldCreateUser: false })`, so it never creates accounts and never reveals whether an address has one. Files: `lib/emailAccount.js` (logic, `tests/emailAccount.test.mjs`), `components/KeepAccount.js` (screen), `app/my/page.js` (clears and reloads the lists when the account changes, so one person's reports are never left for the next).
+- Sign out uses `scope: 'local'` (this phone only) and turns off this phone's push alerts for that account.
+- It does NOT change confirmation counting (015) or add trust: emails are cheap to create.
+- Needs in Supabase: custom SMTP (the built-in service sends only to team members, 2 an hour project-wide), "Allow manual linking", `/my` in Redirect URLs, email provider and Confirm email on.
+- Unverified: the merge relies on the old account still being `is_anonymous` when the ticket is made, which holds until its email is confirmed; the real merge has been tested only on a stand-in database, not a live Supabase project. Supabase's docs do not say whether `is_anonymous` flips or the id stays after confirming; the app relies on the confirmed email, and the setup guide's test 6 checks the id.
+- The three risks found in review are now handled:
+  1. Email quota: optional Send Email hook `supabase/functions/auth-email` (+ `018_auth_email_throttle.sql`): moderators always allowed, residents 4 per day per account, 3 per day per address, 30 per hour and 300 per day in total; fails open if the database cannot be reached. OFF until you switch the hook on (README beside the function). Unverified: how Supabase shows the hook's 429 to the app, and whether Supabase's own hourly email limit also counts hook-sent mail.
+  2. "Email already has an account": `addEmailOrSignIn` in `lib/emailAccount.js` falls back to a sign-in link and the screen shows one message either way. The "waiting for your link" line comes from this phone's own record, not from the server.
+  3. Reports left behind: `017_merge_anonymous_reports.sql` + `lib/mergeTicket.js` (tests in `tests/mergeTicket.test.mjs` and the 017 part of `tests/hardening_stub_test.sql`). A ticket is only honoured for the email address it was made for, once, within 24 hours.
+
+## "Is it fixed?" (019)
+- Neighbours (reporter + confirmers) answer Fixed / Partly / Not fixed on resolved reports; two disputes that outnumber "fixed" reopen the report with its original sent date, up to twice automatically. Details and the rule numbers: `docs/fix-check.md`. Files: `019_fix_checks.sql`, `lib/fixCheck.js`, `components/FixCheck.js`, tracker card line, `notify` message `reopened`. Tests: 019 part of `tests/hardening_stub_test.sql`, `tests/fixCheck.test.mjs`.
+- Answers move with a person when 017 merges accounts.
+- Moderators: 020 and the "Disputed fixes" tab in `/admin` (`lib/adminFix.js`, `tests/adminFix.test.mjs`) show totals and reopen counts, never who answered.
+- Not done: a public "reopened" filter, using this in the monthly report.
+
 ## Recommended next steps
 1. Run setup (SQL files 001-008), become a moderator, and test the whole loop with real reports: report, confirm, assign party, send message, mark sent, add after photo, mark resolved, check the tracker. Fix whatever breaks.
 2. Find out who handles each problem type in the launch area and add them as parties (as a moderator, or by approving suggestions on the Directory tab).
@@ -110,19 +201,20 @@ NOT BUILT:
 
 ## Prompt for the new chat
 ```
-I'm an IT student in Ghana building CivicPulse, a civic accountability app for local neighborhood problems (waste, choked gutters, streetlights, potholes). Residents report with a photo and location; the core feature is a public tracker showing whether and how fast each case gets fixed. Act as my technical mentor and pair-programmer. Be practical and honest, and push back if I'm overcomplicating things.
+I'm an IT student in Ghana building CivicPulse, a civic accountability app for local neighborhood problems (waste, choked gutters, streetlights, potholes). Residents report with a photo and location, neighbours confirm, and a public tracker shows whether and how fast each responsible office fixes things. Act as my technical mentor and pair-programmer. Be practical and honest, say plainly what you have and have not verified, and push back if I'm overcomplicating things.
 
-I've attached HANDOVER.md and the SQL files (001-008). Read HANDOVER.md first: it lists decisions made, what's built, what isn't, and known issues. The code is written but I have not yet run it against Supabase.
+I've attached HANDOVER.md and the project zip. Read HANDOVER.md first, starting at "START HERE": it lists what is built, what has been tested only on stand-ins, the known gaps, and the next steps. Phone verification is OFF and waiting for my Arkesel API key; do not run 011b until I say so.
 
 My context:
 - Launch area: [fill in]
 - Who handles each problem type there: [fill in or "still finding out"]
-- Skill level: [fill in]
+- Which migrations I have run on my live Supabase: [e.g. "up to 013" or "014, 015, 016"]
+- Which switches are on in Vercel: [e.g. "Turnstile only"]
 - Time per week: [fill in]
 
-Current status: [e.g. "I ran setup and the report form works" or paste any errors]
+Current status: [what works, or paste errors / the output of npm run check:live]
 
-What I need now: [e.g. "Build the map and list view" or "Fix this error: ..."]
+What I need now: [e.g. "walk me through running 014-020 and the live check" or "build emergency signposting"]
 
 Ask me up to 3 questions before you start.
 ```

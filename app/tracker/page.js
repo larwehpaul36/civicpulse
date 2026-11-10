@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { fetchAll } from '@/lib/fetchAll';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import { summarize, partyStats, sortParties, weeklyTrend } from '@/lib/trackerStats';
@@ -54,6 +56,7 @@ function PartyCard({ p, name }) {
         <div className="m"><b>{p.open}</b><span>{T.open}</span></div>
         <div className="m"><b>{p.oldestOpen === null ? '—' : T.days(p.oldestOpen)}</b><span>{T.oldest}</span></div>
       </div>
+      {p.reopened > 0 && <p className="warn">{T.reopened(p.reopened)}</p>}
       <div className="rate" aria-hidden="true"><i style={{ width: `${p.rate}%` }} /></div>
       <div className="sparkrow"><Spark data={p.spark} /><span className="hint">{T.fixesPerWeek}</span></div>
     </article>
@@ -68,12 +71,17 @@ export default function TrackerPage() {
 
   useEffect(() => {
     (async () => {
-      const [i, p, c] = await Promise.all([
-        supabase.from('public_issues').select('id, status, party_id, category_id, created_at, sent_at, resolved_at').limit(5000),
-        supabase.from('responsible_parties').select('id, name'),
-        supabase.from('categories').select('id, name'),
-      ]);
-      setData({ rows: i.data ?? [], names: Object.fromEntries((p.data ?? []).map((x) => [x.id, x.name])), cats: c.data ?? [] });
+      // fetchAll reads every page: Supabase returns at most 1000 rows per request, so a plain limit(5000) would silently cut the tracker short
+      try {
+        const [issues, parties, cats, fix] = await Promise.all([
+          fetchAll((a, b) => supabase.from('public_issues').select('id, status, party_id, category_id, created_at, sent_at, resolved_at').order('id').range(a, b)),
+          fetchAll((a, b) => supabase.from('responsible_parties').select('id, name').order('id').range(a, b)),
+          fetchAll((a, b) => supabase.from('categories').select('id, name').order('id').range(a, b)),
+          fetchAll((a, b) => supabase.from('public_fix_checks').select('issue_id, reopen_count').gt('reopen_count', 0).order('issue_id').range(a, b)).catch(() => []), // empty if 019 has not been run
+        ]);
+        const reopen = new Map(fix.map((x) => [x.issue_id, x.reopen_count]));
+        setData({ rows: issues.map((r) => ({ ...r, reopen_count: reopen.get(r.id) ?? 0 })), names: Object.fromEntries(parties.map((x) => [x.id, x.name])), cats });
+      } catch (err) { console.error(err); setData({ rows: [], names: {}, cats: [] }); }
     })();
   }, []);
 
@@ -88,6 +96,7 @@ export default function TrackerPage() {
     <main className="wrap wide">
       <h1 className="page-title">{s.trackerTitle}</h1>
       <p>{T.intro}</p>
+      <p><Link href="/monthly">{T.monthlyLink}</Link> · <Link href="/data">{T.dataLink}</Link></p>
 
       {data === null && <p className="hint">{s.loading}</p>}
       {data !== null && (

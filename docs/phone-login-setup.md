@@ -1,4 +1,4 @@
-> **PAUSED.** Arkesel only issues OTP sender IDs to registered businesses, so phone login is on hold. Keep the two database triggers disabled. This guide is for when a registered organisation is behind the app.
+> **PAUSED.** Arkesel only issues OTP sender IDs to registered businesses, so phone login is on hold. The two database triggers stay OFF: `011_phone_verified.sql` installs them switched off, and only `011b_enable_phone_rules.sql` turns them on. This guide is for when a registered organisation is behind the app.
 
 # Phone login setup (Arkesel + Supabase + Vercel)
 
@@ -15,7 +15,7 @@ Order matters: the database rules in step 6 are the last switch. Until then noth
    - `NEXT_PUBLIC_CONTACT_EMAIL` = the contact address for the Privacy Notice (optional but recommended)
    Also in **Supabase > Authentication > Rate Limits**: lower the SMS limit (for example 30 per hour) as a cost cap. Your Arkesel balance is the hard cap.
 6. **Test before switching the rules on**: open `https://civicpulse-live.vercel.app/verify` on your phone, tap **Confirm my phone**, use your own number, and check the text arrives and the code works. Try a wrong code once.
-7. **Then run `011_phone_verified.sql`** in the Supabase SQL editor. From now on, confirming a report and sending a second report within 24 hours need a confirmed phone.
+7. **Then run `011b_enable_phone_rules.sql`** in the Supabase SQL editor (after `011_phone_verified.sql` has been run once). From now on, confirming a report and sending a second report within 24 hours need a confirmed phone. To switch off again at once, run the two `disable trigger` lines at the bottom of that file. Check the state any time: `select tgname, tgenabled from pg_trigger where tgname in ('confirmations_need_phone','issues_need_phone');` (`D` = off, `O` = on).
 8. Run `npm run check:live` (add `NEXT_PUBLIC_SITE_URL=https://civicpulse-live.vercel.app` to `.env.local` first).
 
 If a text does not arrive: check the Arkesel balance and sender approval first, then Vercel > Logs for `/api/auth/send-sms` (the app logs the reason but never the code or the number).
