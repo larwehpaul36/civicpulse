@@ -43,7 +43,7 @@ test('a status change sends a push with the message and the report address', asy
 });
 
 test('every real status has a message; unknown ones and "reported" send nothing', async () => {
-  for (const status of ['verified', 'sent', 'in_progress', 'resolved', 'rejected']) assert.ok(MESSAGES[status], status);
+  for (const status of ['verified', 'sent', 'in_progress', 'resolved', 'rejected', 'reopened']) assert.ok(MESSAGES[status], status);
   const { deps, log } = setup({ subs: [sub(1)] });
   assert.deepEqual(await handleEvent(note('reported'), deps), { ignored: true });
   assert.deepEqual(await handleEvent(note('mystery'), deps), { ignored: true });

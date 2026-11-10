@@ -9,6 +9,7 @@ export const MESSAGES = {
   in_progress: 'Work has started on a report you follow.',
   resolved: 'A report you follow was marked resolved.',
   rejected: 'A report you follow was closed by a moderator.',
+  reopened: 'Neighbours said a report you follow is not fixed, so it was reopened.',
 };
 
 const GONE = new Set([404, 410]); // the browser removed the subscription: stop sending to it

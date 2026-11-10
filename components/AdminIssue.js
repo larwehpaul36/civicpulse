@@ -114,12 +114,20 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
           <span className="hint">
             {' '}· {s.daysOpen(i.days_open)} · {s.confirmations(i.confirmation_count)}
             {i.flag_count > 0 && <> · <strong>{A.flagsCount(i.flag_count)}</strong></>}
+            {i.reopen_count > 0 && <> · <strong>{A.reopenedTimes(i.reopen_count)}</strong></>}
             {mine.length > 0 && <> · {A.links.count(mine.length)}</>}
           </span>
         </summary>
 
         <div className="admin-body">
           {i.description && <p>{i.description}</p>}
+          {(i.fix_fixed + i.fix_partly + i.fix_not > 0 || i.reopen_count > 0) && (
+            <p className="warn">
+              {i.fix_fixed + i.fix_partly + i.fix_not > 0 && <>{A.fixLine(i.fix_fixed, i.fix_partly, i.fix_not)} </>}
+              {i.reopen_count > 0 && i.status !== 'resolved' && <>{A.reopenedTimes(i.reopen_count)} {A.reopenedCheck}</>}
+              {i.reopen_count >= 2 && i.status === 'resolved' && A.reopenedCapped}
+            </p>
+          )}
           <div className="photos">
             {i.before_path && <img src={photoUrl(i.before_path)} alt={s.a11y.beforePhoto} />}
             {i.after_path && <img src={photoUrl(i.after_path)} alt={s.a11y.afterPhoto} />}
