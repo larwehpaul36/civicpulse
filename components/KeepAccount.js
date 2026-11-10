@@ -56,7 +56,7 @@ export default function KeepAccount({ hasReports = false, onMerged }) {
       .then((r) => { if (r?.moved) { setMsg(A.merged(r.moved)); onMerged?.(r.moved); } })
       .catch((err) => console.error(err))
       .finally(() => { claiming.current = false; });
-  }, [signedEmail]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [signedEmail]); // runs once per sign-in; the other values it reads are stable
 
   if (!EMAIL_ACCOUNTS || user === undefined) return null;
   const state = accountState(user);
