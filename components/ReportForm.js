@@ -13,6 +13,7 @@ import { queue, syncer } from '@/lib/sync';
 import { useOutbox } from '@/lib/useOutbox';
 import { readCachedRefData, fetchRefData } from '@/lib/refData';
 import { compressImage } from '@/lib/compressImage';
+import PhotoBlur from '@/components/PhotoBlur';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import EmergencyNotice from '@/components/EmergencyNotice';
@@ -241,6 +242,7 @@ export default function ReportForm() {
           <span className="hint">{s.photoHelp}</span>
         </label>
         {preview && <img className="preview" src={preview} alt={s.a11y.yourPhoto} />}
+        <PhotoBlur file={photo} onApply={setPhoto} />
       </div>
 
       <div className="stepbody" hidden={step !== 1}>
