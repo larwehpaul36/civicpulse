@@ -100,6 +100,15 @@ await check('Moderators can see "Is it fixed?" totals (020)', 'Run 020_admin_fix
   if (r.error && /Could not find the function|does not exist/i.test(r.error.message)) return { warn: '020 not run yet (needs 019 first)' };
   must(r.error, 'admin_fix_check_summary answered a signed-out visitor');
 });
+await check('Office replies work and stay private (021)', 'Run 021_office_replies.sql in the Supabase SQL editor', async () => {
+  const v = await sb.from('office_replies').select('id, kind, body, expected_date').limit(1);
+  if (v.error && /does not exist|schema cache|Could not find/i.test(v.error.message)) return { warn: '021 not run yet: offices have no way to reply in public' };
+  must(!v.error, `office_replies: ${v.error?.message}`);
+  const p = await sb.from('office_replies').select('relayed_by').limit(1);
+  must(p.error, 'anyone can read which moderator relayed a reply');
+  const w = await sb.rpc('admin_add_office_reply', { p_issue: '00000000-0000-0000-0000-000000000000', p_kind: 'reply', p_body: 'x' });
+  must(w.error, 'admin_add_office_reply answered a signed-out visitor');
+});
 await check('The tracker can read more than 1000 reports (paging)', 'Check public_issues is readable', async () => {
   const r = await sb.from('public_issues').select('id', { count: 'exact', head: true });
   must(!r.error, `public_issues: ${r.error?.message}`);

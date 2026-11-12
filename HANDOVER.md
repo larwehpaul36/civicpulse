@@ -1,6 +1,22 @@
 # CivicPulse: handover note
 
-Last updated: 7 Nov 2026. **Read "START HERE" first**: it is the current state. The rest of the file is the older history (phases 1-7) and is still accurate for those parts. Paste the "Prompt for the new chat" section (bottom) into a new chat and attach this file, the whole project zip (or at least the SQL files 001-020), and your `.env.local` NAMES only (never the secret values).
+Last updated: 11 Nov 2026. **Read "START HERE" first**: it is the current state. The rest of the file is the older history (phases 1-7) and is still accurate for those parts. Paste the "Prompt for the new chat" section (bottom) into a new chat and attach this file, the whole project zip (or at least the SQL files 001-020), and your `.env.local` NAMES only (never the secret values).
+
+## HOW WE WORK (standing rule, 11 Nov 2026)
+- The app is already hosted: **GitHub repo + Vercel**. Vercel builds a **preview** for every branch and pull request, and only the `main` branch goes to production.
+- So every change is delivered as: files ready to commit on a **new branch** (never straight to `main`), a suggested branch name and commit message, then **you test on that branch's Vercel preview URL** and merge to `main` only when it works.
+- "Run the tests" means: `npm test`, `npm run lint:a11y` and `npm run build` on your machine (Windows PowerShell), then try the feature on the preview URL **on a real phone**. Anything that touches the database needs the SQL run on Supabase FIRST, and the preview uses the same Supabase project as production, so test SQL on a copy or be careful.
+- Env vars (feature switches) are set per environment in Vercel: Settings > Environment Variables. Use "Preview" to try a switch before "Production".
+- Details: `docs/release-workflow.md`.
+
+## Added 12 Nov 2026: office right of reply (needs migration 021)
+- Assumptions made (not yet confirmed by the owner): moderators relay replies (no office sign-in); an office can post a reply, an expected date, or "not our responsibility"; it cannot mark a report fixed. Details: `docs/office-replies.md`.
+- Files: `021_office_replies.sql`, `lib/officeReplies.js`, `components/OfficeReplies.js` (public), `components/AdminReplyForm.js` (in the /admin case panel), `tests/officeReplies.test.mjs`, `tests/replies_stub_test.sql` (28 checks), a line in `check:live`.
+- Deploy the app first (it works without 021), then run 021.
+
+## Added 11 Nov 2026: photo privacy (no migration)
+- `lib/blur.js`, `components/PhotoBlur.js`, `tests/blur.test.mjs`: the report form has an optional "Hide faces, number plates or house numbers" step. The resident drags boxes; each is replaced with a coarse mosaic on the phone BEFORE the photo is queued or uploaded. "Find faces" appears only where the browser has `FaceDetector`. Plates are manual only.
+- Not done: moderator after-photos are not passed through it; keyboard-only drawing; automatic plate detection. Unit tests pass; not yet tried on a real phone or on a Vercel preview.
 
 ## START HERE (state on 7 Nov 2026)
 
@@ -60,7 +76,7 @@ Everything below is written and tested only on stand-ins (a throwaway Postgres w
 2. Deploy to Vercel and test one full loop with real reports: report, confirm from another phone near it, mark sent, resolve with an after photo, answer "not fixed" twice and watch it reopen.
 3. Decide on email sign-in: if yes, do `docs/email-signin-setup.md` (SMTP first), run 017, set the flag, test on a real phone. Optional: the email hook + 018.
 4. When the Arkesel key arrives: set up the SMS hook, test codes, then add the phone+email merge change (gap 1), then run 011b.
-5. Next features (from the FixMyStreet comparison): face and plate blurring; right of reply for offices; an office dashboard; WhatsApp or USSD intake; local languages and voice notes.
+5. Next features (from the FixMyStreet comparison): right of reply for offices; an office dashboard; WhatsApp or USSD intake; local languages and voice notes.
 
 ### Zips delivered in the last chat
 `CivicPulse-Safe-hardened.zip` (hardening), `CivicPulse-Safe-email-signin.zip`, `CivicPulse-Safe-merge-and-limits.zip` (017, 018, email hook), `CivicPulse-Safe-fix-check.zip` (019), and the latest one with 020 and this note. The latest zip contains everything from the earlier ones.

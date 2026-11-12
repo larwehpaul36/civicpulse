@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { compressImage } from '@/lib/compressImage';
 import { linksOf, otherEnd, parseIssueId, suggestions } from '@/lib/relatedIssues';
 import { strings as s } from '@/lib/strings';
+import AdminReplyForm from '@/components/AdminReplyForm';
 
 const A = s.admin;
 const photoUrl = (path) => supabase.storage.from('issue-photos').getPublicUrl(path).data.publicUrl;
@@ -222,6 +223,8 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
             {i.party_id && <button type="button" className="secondary" disabled={busy} onClick={() => logContact(false)}>{A.logNoResponse}</button>}
             {i.flag_count > 0 && <button type="button" className="secondary" disabled={busy} onClick={() => run(() => rpc('admin_dismiss_flags', { p_issue: i.id }))}>{A.dismissFlags}</button>}
           </div>
+
+          <AdminReplyForm issueId={i.id} hasParty={!!i.party_id} />
 
           {i.status !== 'resolved' && (
             <>

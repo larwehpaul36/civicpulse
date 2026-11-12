@@ -7,6 +7,7 @@ import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import ShareButton from '@/components/ShareButton';
 import FixCheck from '@/components/FixCheck';
+import OfficeReplies from '@/components/OfficeReplies';
 import EmergencyNotice from '@/components/EmergencyNotice';
 import { needsEmergencyNotice } from '@/lib/emergency';
 import { useVerify } from '@/components/PhoneVerify';
@@ -123,6 +124,7 @@ export default function IssuePage() {
       )}
       {msg && <p aria-live="polite"><strong>{msg}</strong></p>}
       {issue.status === 'resolved' && <FixCheck issueId={id} onReopened={load} />}
+      <OfficeReplies issueId={id} status={issue.status} partyName={party?.name} />
 
       {related.length > 0 && (
         <>
