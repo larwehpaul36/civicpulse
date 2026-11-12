@@ -304,3 +304,9 @@ body { min-height:100dvh; }
 /* Emergency numbers on "Dangerous right now" reports: big, easy tap targets */
 .emergency-list { list-style: none; margin: .5rem 0; padding: 0; display: flex; flex-wrap: wrap; gap: .5rem; }
 .emergency-list a { display: inline-block; min-height: 44px; padding: .6rem .9rem; border-radius: 10px; border: 2px solid currentColor; text-decoration: none; }
+
+/* ---- hide faces and plates ---- */
+.blur { border:2px solid var(--line); border-radius:var(--radius); padding:1rem; background:var(--surface); margin-top:.8rem; }
+.blur h3 { margin:0 0 .3rem; }
+.blurcanvas { width:100%; height:auto; touch-action:none; cursor:crosshair; border-radius:10px; border:2px solid var(--line); display:block; }
+.blur .row { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.6rem; }
