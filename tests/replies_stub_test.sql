@@ -13,7 +13,10 @@ create table moderators (user_id uuid primary key);
 create function is_moderator() returns boolean language sql stable security definer as $$ select exists (select 1 from moderators where user_id = auth.uid()) $$;
 create function assert_moderator() returns void language plpgsql as $$ begin if not is_moderator() then raise exception 'not_moderator' using errcode='42501'; end if; end $$;
 create table responsible_parties (id uuid primary key default gen_random_uuid(), name text);
-create table issues (id uuid primary key, status text default 'sent', party_id uuid);
+create table issues (id uuid primary key, status text default 'sent', party_id uuid, reporter_id uuid);
+create table confirmations (issue_id uuid, user_id uuid);
+create table notifications (id uuid primary key default gen_random_uuid(), user_id uuid not null, issue_id uuid not null, to_status text not null,
+  created_at timestamptz default now(), read_at timestamptz);
 alter table issues enable row level security;
 create policy "issues readable" on issues for select using (status <> 'rejected');
 grant select on issues, responsible_parties to anon, authenticated;
@@ -24,9 +27,14 @@ insert into issues (id, status, party_id) values
   ('00000000-0000-0000-0000-000000000002', 'reported', null),
   ('00000000-0000-0000-0000-000000000003', 'rejected', '00000000-0000-0000-0000-0000000000a1');
 insert into moderators values ('11111111-1111-1111-1111-111111111111');
+update issues set reporter_id = 'aaaaaaaa-0000-0000-0000-000000000001' where id = '00000000-0000-0000-0000-000000000001';
+insert into confirmations values ('00000000-0000-0000-0000-000000000001', 'bbbbbbbb-0000-0000-0000-000000000002'),
+                                 ('00000000-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001');  -- reporter confirmed too: still one notice
 
 \i 021_office_replies.sql
 \i 021_office_replies.sql   -- twice: must be safe
+\i 022_office_reply_notices.sql
+\i 022_office_reply_notices.sql   -- twice: must be safe
 
 create function expect(name text, ok boolean) returns void language plpgsql as $$ begin
   if ok then raise notice 'PASS %', name; else raise exception 'FAIL %', name; end if; end $$;
@@ -91,4 +99,25 @@ reset role;
 insert into office_replies (issue_id, kind, body) values ('00000000-0000-0000-0000-000000000003', 'reply', 'on a rejected report');
 set role anon;
 select expect('replies on a rejected report stay hidden', (select count(*) = 3 from office_replies));
+reset role;
+
+-- 022: notices to followers
+create function nrows(k text) returns bigint language sql as $$ select count(*) from notifications where to_status = k $$;
+select expect('022: first reply notified the reporter and the confirmer once each (not the reporter twice)', nrows('office_reply') = 2);
+select expect('022: a date notice and a not-ours notice use their own kinds', nrows('office_date') = 2 and nrows('office_not_ours') = 2);
+select expect('022: the notice carries no reply text', not exists (select 1 from information_schema.columns where table_name = 'notifications' and column_name in ('body', 'message')));
+select expect('022: nobody else was notified', (select count(*) = 2 from (select distinct user_id from notifications) u));
+select expect('022: the later replies in the test (second plain reply) did not add duplicates while unread', nrows('office_reply') = 2);
+update notifications set read_at = now() where to_status = 'office_reply';
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+set role authenticated;
+select admin_add_office_reply('00000000-0000-0000-0000-000000000001', 'reply', 'Crew is booked for Monday.');
+reset role;
+select expect('022: once they have read the earlier notice, a new reply notifies again', nrows('office_reply') = 4);
+select expect('022: a report with nobody following creates no notices and no error', (select count(*) from notifications where issue_id = '00000000-0000-0000-0000-000000000002') = 0);
+-- a failing notification step must not block the reply
+alter table notifications rename to notifications_gone;
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+set role authenticated;
+select expect('022: a broken notice step never blocks the reply', admin_add_office_reply('00000000-0000-0000-0000-000000000001', 'reply', 'still saved') is not null);
 reset role;

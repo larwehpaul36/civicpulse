@@ -10,6 +10,9 @@ export const MESSAGES = {
   resolved: 'A report you follow was marked resolved.',
   rejected: 'A report you follow was closed by a moderator.',
   reopened: 'Neighbours said a report you follow is not fixed, so it was reopened.',
+  office_reply: 'The responsible office replied to a report you follow.',
+  office_date: 'The responsible office gave an expected fix date for a report you follow.',
+  office_not_ours: 'The responsible office says a report you follow is not its responsibility. A moderator will look at it.',
 };
 
 const GONE = new Set([404, 410]); // the browser removed the subscription: stop sending to it

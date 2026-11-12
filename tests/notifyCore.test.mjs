@@ -43,7 +43,7 @@ test('a status change sends a push with the message and the report address', asy
 });
 
 test('every real status has a message; unknown ones and "reported" send nothing', async () => {
-  for (const status of ['verified', 'sent', 'in_progress', 'resolved', 'rejected', 'reopened']) assert.ok(MESSAGES[status], status);
+  for (const status of ['verified', 'sent', 'in_progress', 'resolved', 'rejected', 'reopened', 'office_reply', 'office_date', 'office_not_ours']) assert.ok(MESSAGES[status], status);
   const { deps, log } = setup({ subs: [sub(1)] });
   assert.deepEqual(await handleEvent(note('reported'), deps), { ignored: true });
   assert.deepEqual(await handleEvent(note('mystery'), deps), { ignored: true });
@@ -112,4 +112,13 @@ test('a failed confirmation email is reported, not thrown', async () => {
   const { deps } = setup({ emailError: new Error('down') });
   const result = await handleEvent({ type: 'INSERT', table: 'notification_contacts', record: { email: 'a@b.co', verify_token: 'v', verified_at: null } }, deps);
   assert.deepEqual(result, { verificationSent: false, failed: 1 });
+});
+
+test('every notice kind the database can create has wording in the feed and in the sender (they must stay in step)', async () => {
+  const { strings } = await import('../lib/strings.js');
+  for (const k of ['office_reply', 'office_date', 'office_not_ours']) {
+    assert.ok(strings.statusLabels[k], `feed label for ${k}`);
+    assert.ok(MESSAGES[k], `push/email text for ${k}`);
+    assert.ok(!MESSAGES[k].includes('“'), 'no reply text in a notice');
+  }
 });

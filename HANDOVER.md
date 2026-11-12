@@ -12,7 +12,7 @@ Last updated: 11 Nov 2026. **Read "START HERE" first**: it is the current state.
 ## Added 12 Nov 2026: office right of reply (needs migration 021)
 - Assumptions made (not yet confirmed by the owner): moderators relay replies (no office sign-in); an office can post a reply, an expected date, or "not our responsibility"; it cannot mark a report fixed. Details: `docs/office-replies.md`.
 - Files: `021_office_replies.sql`, `lib/officeReplies.js`, `components/OfficeReplies.js` (public), `components/AdminReplyForm.js` (in the /admin case panel), `tests/officeReplies.test.mjs`, `tests/replies_stub_test.sql` (28 checks), a line in `check:live`.
-- Deploy the app first (it works without 021), then run 021.
+- Deploy the app first (it works without 021), then run 021, then 022 (notices to followers: `022_office_reply_notices.sql`; redeploy the `notify` function too). 022 is tested in the same stub file (36 checks in total).
 
 ## Added 11 Nov 2026: photo privacy (no migration)
 - `lib/blur.js`, `components/PhotoBlur.js`, `tests/blur.test.mjs`: the report form has an optional "Hide faces, number plates or house numbers" step. The resident drags boxes; each is replaced with a coarse mosaic on the phone BEFORE the photo is queued or uploaded. "Find faces" appears only where the browser has `FaceDetector`. Plates are manual only.

@@ -17,4 +17,6 @@
 3. `npm run check:live`: the 021 line should pass.
 4. In `/admin`, open a case that has a party, publish a test reply, then open the public report page. Hide it afterwards.
 
-**Not done:** notifying followers when an office replies (the existing notifications trigger watches status changes only); showing "expected date vs actual fix" on the tracker; office sign-in.
+**Followers are told (022).** When a reply is recorded, the reporter and everyone who confirmed the report get an update on `/my`, and a push or email if they switched those on (same `notify` function and webhook as status changes; nothing new to set up). The notice says only that the office replied, gave a date, or says it is not its job. It never contains the reply text, because push messages show on lock screens. Someone who still has an unread notice of the same kind for that report is not sent another. Run `022_office_reply_notices.sql` after 021. **Also redeploy the `notify` function** (`supabase functions deploy notify`) so the new wording is used; until then the feed works but push and email ignore these notices. Check: after a test reply, `select user_id, to_status from notifications where to_status like 'office_%' order by created_at desc limit 5;`.
+
+**Not done:** showing "expected date vs actual fix" on the tracker; office sign-in.
