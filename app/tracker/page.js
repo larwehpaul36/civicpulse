@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { fetchAll } from '@/lib/fetchAll';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
+import PromiseStats from '@/components/PromiseStats';
 import { summarize, partyStats, sortParties, weeklyTrend } from '@/lib/trackerStats';
 
 const T = s.tracker2;
@@ -130,6 +131,8 @@ export default function TrackerPage() {
               <div className="pcards">{parties.map((p) => <PartyCard key={p.id} p={p} name={data.names[p.id] ?? '—'} />)}</div>
             </>
           )}
+
+          {process.env.NEXT_PUBLIC_SHOW_PROMISES === '1' && <PromiseStats rows={data.rows} names={data.names} />}
 
           <details className="how-it-works">
             <summary>{T.howTitle}</summary>

@@ -7,12 +7,17 @@ Last updated: 11 Nov 2026. **Read "START HERE" first**: it is the current state.
 - So every change is delivered as: files ready to commit on a **new branch** (never straight to `main`), a suggested branch name and commit message, then **you test on that branch's Vercel preview URL** and merge to `main` only when it works.
 - "Run the tests" means: `npm test`, `npm run lint:a11y` and `npm run build` on your machine (Windows PowerShell), then try the feature on the preview URL **on a real phone**. Anything that touches the database needs the SQL run on Supabase FIRST, and the preview uses the same Supabase project as production, so test SQL on a copy or be careful.
 - Env vars (feature switches) are set per environment in Vercel: Settings > Environment Variables. Use "Preview" to try a switch before "Production".
+- **Every delivery ends with numbered, copy-paste steps** in this order: (1) branch, (2) unzip, (3) `npm test`, `npm run lint:a11y`, `npm run build`, (4) commit and push, (5) open the pull request and wait for the Vercel preview, (6) any Supabase SQL or function deploy, in order, saying plainly that it touches the live database, (7) what to test on the preview on a real phone, (8) merge, then check production and `npm run check:live`. Say what the owner should expect to see at each step.
 - Details: `docs/release-workflow.md`.
 
 ## Added 12 Nov 2026: office right of reply (needs migration 021)
 - Assumptions made (not yet confirmed by the owner): moderators relay replies (no office sign-in); an office can post a reply, an expected date, or "not our responsibility"; it cannot mark a report fixed. Details: `docs/office-replies.md`.
 - Files: `021_office_replies.sql`, `lib/officeReplies.js`, `components/OfficeReplies.js` (public), `components/AdminReplyForm.js` (in the /admin case panel), `tests/officeReplies.test.mjs`, `tests/replies_stub_test.sql` (28 checks), a line in `check:live`.
 - Deploy the app first (it works without 021), then run 021, then 022 (notices to followers: `022_office_reply_notices.sql`; redeploy the `notify` function too). 022 is tested in the same stub file (36 checks in total).
+
+## Added 12 Nov 2026: promises kept (no migration)
+- `lib/promises.js`, `components/PromiseStats.js`, `tests/promises.test.mjs` (11 checks), tab "Promises kept" in /admin, optional public section on /tracker behind `NEXT_PUBLIC_SHOW_PROMISES=1` (default 0: moderators only at first, decided by Claude, not yet confirmed by the owner). Rules in `docs/office-replies.md`. Needs 021 only.
+- Not tested in a browser or on live data.
 
 ## Added 11 Nov 2026: photo privacy (no migration)
 - `lib/blur.js`, `components/PhotoBlur.js`, `tests/blur.test.mjs`: the report form has an optional "Hide faces, number plates or house numbers" step. The resident drags boxes; each is replaced with a coarse mosaic on the phone BEFORE the photo is queued or uploaded. "Find faces" appears only where the browser has `FaceDetector`. Plates are manual only.

@@ -6,6 +6,7 @@ import { placeLabel } from '@/lib/places';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import AdminIssue from '@/components/AdminIssue';
+import PromiseStats from '@/components/PromiseStats';
 import AdminSuggestion from '@/components/AdminSuggestion';
 import { isDisputed, mergeFixChecks } from '@/lib/adminFix';
 
@@ -171,15 +172,17 @@ export default function AdminPage() {
       {signedIn && role === 'yes' && (
         <>
           <div className="tabs" role="tablist">
-            {[...Object.keys(VIEWS), 'directory'].map((k) => (
+            {[...Object.keys(VIEWS), 'promises', 'directory'].map((k) => (
               <button key={k} type="button" role="tab" aria-selected={view === k}
                 className={view === k ? 'tab on' : 'tab'} onClick={() => setView(k)}>
-                {A.views[k]} ({counts[k]})
+                {A.views[k]}{counts[k] === undefined ? '' : ` (${counts[k]})`}
               </button>
             ))}
           </div>
 
-          {view === 'directory' ? (
+          {view === 'promises' ? (
+            <PromiseStats rows={issues} names={Object.fromEntries(parties.map((x) => [x.id, x.name]))} />
+          ) : view === 'directory' ? (
             <>
               {suggestions.length === 0 && <p>{A.directory.none}</p>}
               <ul className="cards">
