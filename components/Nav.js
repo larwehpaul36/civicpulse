@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import MyReportsLink from '@/components/MyReportsLink';
+import LanguageSwitch from '@/components/LanguageSwitch';
 import { strings as s } from '@/lib/strings';
 import { home as h } from '@/lib/homeStrings';
 import '@/components/nav-about.css';
@@ -29,6 +30,7 @@ export default function Nav() {
           </Link>
           {LINKS.slice(3).map(link)}
           <MyReportsLink />
+          <LanguageSwitch />
         </nav>
       </div>
     </header>
