@@ -51,6 +51,12 @@ Read this with "HOW WE WORK". Status as of 12 Nov 2026, 14:47 (Accra time).
 - Screenshots are the best way for the owner to show results; pasted tables lose columns.
 - ESLint here has no react-hooks plugin: do not add `eslint-disable react-hooks/...` comments.
 
+## Added 13 Nov 2026: languages (needs review before going live)
+- Built: language switch machinery (`lib/languages.js`, `lib/lang.js`, `components/LangProvider.js`, `components/LanguageSwitch.js`), draft packs `lib/lang/tw.js` and `ha.js` (round 1: report-and-confirm path, about 96 lines each), empty templates `ee.js`, `gaa.js`, reviewer sheets `translations/review-*.csv` (made by `scripts/export-translations.mjs`), `023_category_translations_draft.sql`, `docs/languages.md`, `tests/lang.test.mjs` (11 checks).
+- Status: NOTHING is visible to residents until a language is set to `live` in `lib/languages.js` after a native speaker reviews it. `NEXT_PUBLIC_SHOW_UNREVIEWED_LANGS=1` (Vercel Preview only) shows the drafts for reviewers.
+- Honest limits: Twi and Hausa are AI drafts; Ewe and Ga are empty on purpose (a poor draft costs a reviewer more than a blank). The owner arranges reviewers. Privacy notice, My reports, tracker, directory, admin and push/email text are still English.
+- `app/page.js` became a client page so the home steps can switch language.
+
 ## Added 12 Nov 2026 (evening): after-photo privacy and SQL tests in CI
 - `components/AdminIssue.js`: the moderator's "after" photo has the same hide-faces-and-plates step as residents' photos.
 - `scripts/run-sql-tests.sh` runs all `tests/*_stub_test.sql` (directory, hardening 121 checks, issue links, notifications, replies 36 checks), each in its own throwaway database. New job `sql` in `.github/workflows/ci.yml` runs it on every pull request against a disposable Postgres in GitHub's cloud (never your Supabase). Locally: `PGHOST=localhost PGUSER=postgres bash scripts/run-sql-tests.sh` against a Postgres you do not mind using. Not included: `tests/schema_smoke_test.sql` (needs PostGIS; prints instead of failing).

@@ -310,3 +310,6 @@ body { min-height:100dvh; }
 .blur h3 { margin:0 0 .3rem; }
 .blurcanvas { width:100%; height:auto; touch-action:none; cursor:crosshair; border-radius:10px; border:2px solid var(--line); display:block; }
 .blur .row { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.6rem; }
+
+/* ---- language switch ---- */
+.langswitch { font: inherit; padding:.35rem .5rem; border-radius:8px; border:2px solid var(--line); background:var(--surface); color:inherit; min-height:44px; }

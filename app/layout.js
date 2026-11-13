@@ -2,6 +2,7 @@ import './globals.css';
 import Nav from '@/components/Nav';
 import SyncBanner from '@/components/SyncBanner';
 import PhoneVerifyProvider from '@/components/PhoneVerify';
+import LangProvider from '@/components/LangProvider';
 import { strings as s } from '@/lib/strings';
 
 const site = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL ? 'https://civicpulse-live.vercel.app' : 'http://localhost:3000');
@@ -21,12 +22,14 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <a className="skip" href="#main">{s.a11y.skip}</a>
-        <PhoneVerifyProvider>
-          <Nav />
-          <SyncBanner />
-          <div id="main" tabIndex={-1}>{children}</div>
-        </PhoneVerifyProvider>
+        <LangProvider>
+          <a className="skip" href="#main">{s.a11y.skip}</a>
+          <PhoneVerifyProvider>
+            <Nav />
+            <SyncBanner />
+            <div id="main" tabIndex={-1}>{children}</div>
+          </PhoneVerifyProvider>
+        </LangProvider>
       </body>
     </html>
   );
