@@ -18,6 +18,22 @@ jobs:
       - run: npm run lint:a11y
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
+  sql: # runs every SQL test in tests/*_stub_test.sql against a throwaway Postgres; never touches your Supabase project
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/run-sql-tests.sh
   e2e:
     runs-on: ubuntu-latest
     needs: test

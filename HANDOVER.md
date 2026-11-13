@@ -1,6 +1,6 @@
 # CivicPulse: handover note
 
-Last updated: 11 Nov 2026. **Read "START HERE" first**: it is the current state. The rest of the file is the older history (phases 1-7) and is still accurate for those parts. Paste the "Prompt for the new chat" section (bottom) into a new chat and attach this file, the whole project zip (or at least the SQL files 001-020), and your `.env.local` NAMES only (never the secret values).
+Last updated: 12 Nov 2026. **Read "HOW WE WORK" and "SESSION LOG, 11-12 Nov 2026" first.** **Read "START HERE" first**: it is the current state. The rest of the file is the older history (phases 1-7) and is still accurate for those parts. Paste the "Prompt for the new chat" section (bottom) into a new chat and attach this file, the whole project zip (or at least the SQL files 001-020), and your `.env.local` NAMES only (never the secret values).
 
 ## HOW WE WORK (standing rule, 11 Nov 2026)
 - The app is already hosted: **GitHub repo + Vercel**. Vercel builds a **preview** for every branch and pull request, and only the `main` branch goes to production.
@@ -9,6 +9,52 @@ Last updated: 11 Nov 2026. **Read "START HERE" first**: it is the current state.
 - Env vars (feature switches) are set per environment in Vercel: Settings > Environment Variables. Use "Preview" to try a switch before "Production".
 - **Every delivery ends with numbered, copy-paste steps** in this order: (1) branch, (2) unzip, (3) `npm test`, `npm run lint:a11y`, `npm run build`, (4) commit and push, (5) open the pull request and wait for the Vercel preview, (6) any Supabase SQL or function deploy, in order, saying plainly that it touches the live database, (7) what to test on the preview on a real phone, (8) merge, then check production and `npm run check:live`. Say what the owner should expect to see at each step.
 - Details: `docs/release-workflow.md`.
+
+## SESSION LOG, 11-12 Nov 2026 (what was built, what was advised, what is still open)
+Read this with "HOW WE WORK". Status as of 12 Nov 2026, 14:47 (Accra time).
+
+### Built in this session (by Claude; tested only on stand-ins unless noted)
+| Feature | Files | Status |
+|---|---|---|
+| Photo privacy: draw boxes over faces, plates, house numbers; mosaic on the phone before upload | `lib/blur.js`, `components/PhotoBlur.js`, `tests/blur.test.mjs` | **Merged to main.** Owner tried it on the Vercel preview: working. |
+| Office right of reply (a moderator relays what an office said: reply, expected date, "not our job") | `021_office_replies.sql`, `lib/officeReplies.js`, `components/OfficeReplies.js`, `components/AdminReplyForm.js`, `tests/officeReplies.test.mjs`, `tests/replies_stub_test.sql` (36 SQL checks) | **021 run on live Supabase**; `check:live` line passes. Verified live: a reply was published and shows on the public report page. |
+| Notices to followers when an office replies | `022_office_reply_notices.sql`, wording in `lib/strings.js` and `supabase/functions/notify/core.js` | **022 run on live Supabase; `notify` deployed.** Verified live: one reply created 2 `office_reply` notices (reporter + confirmer). **Not yet confirmed:** `/my` on a phone shows "Now: The office replied", and push arrives. |
+| Promises kept (expected fix date vs real fix date, per office) | `lib/promises.js`, `components/PromiseStats.js`, `tests/promises.test.mjs` (11 checks), "Promises kept" tab in /admin, optional public section on /tracker | In pull request #3 (`feature/office-replies`). Check whether it is merged. Not yet tried in a browser. |
+| Release workflow rule and docs | `docs/release-workflow.md`, "HOW WE WORK" above, `docs/office-replies.md` | In the repo once this file is committed. |
+
+### Live checks (owner ran `npm run check:live` on 12 Nov)
+22 passed, 2 warnings, 0 failed. The warnings are normal: the script cannot sign in while Turnstile is on, so "My reports" and the photo upload must be tested by hand on the site. **014-017, 019, 020 and 021 are confirmed live.** 018 and the auth-email hook are optional and not checked. 011b is NOT run and must not be until the Arkesel key works.
+
+### Decisions and assumptions (the owner did not answer some questions, so Claude chose; they still need the owner's OK)
+- Office replies are RELAYED BY MODERATORS. Offices do not sign in (assumed: it needs no SMTP setup).
+- An office can post a reply (max 500 characters), an expected date, or "not our responsibility" (a note only; a moderator then reassigns). It can NEVER mark a report fixed.
+- Replies are never edited, only hidden. The public never sees which moderator relayed one.
+- Notices to followers never contain the reply text (push messages show on lock screens). A person with an unread notice of the same kind for the same report gets no second one.
+- Promises: only the FIRST date an office gives counts; moved dates are only counted; a promise stays with the office that made it; a percentage shows only after 5 decided dates. The public tracker shows it only when `NEXT_PUBLIC_SHOW_PROMISES=1` (default 0: moderators only for about the first month).
+- Photo privacy: hiding is optional for the resident; plates are manual only; `FaceDetector` is used only where the browser has it.
+
+### Open items for the owner (in order)
+1. Check `/my` on a follower's phone for the "office replied" update (and push if switched on).
+2. In /admin: record an expected date, look at "Promises kept", then HIDE the test replies (the public can see them).
+3. Confirm pull request #3 is merged; then `git checkout main`, `git pull`, `npm run check:live`.
+4. The `notify` function is deployed with `npx supabase@latest functions deploy notify --no-verify-jwt` (the flag is required). Redeploy after any change under `supabase/functions/notify/`.
+5. DONE 12 Nov (in the next pull request, check it is merged): moderator after-photos in /admin now use the same "Hide faces, number plates or house numbers" step (`components/AdminIssue.js`).
+6. Later: set `NEXT_PUBLIC_SHOW_PROMISES=1` (Preview first) when ready to publish the table; office sign-in (needs custom SMTP and `docs/email-signin-setup.md`); WhatsApp/USSD intake (needs a provider); local languages and voice notes; bulk reopen; the phone+email merge fix (gap 1) when the Arkesel key arrives.
+
+### Owner's environment and habits (so the next chat does not rediscover them)
+- Windows, PowerShell, VS Code. Project folder `C:\Users\SikaPaul\Downloads\civicpulse`. GitHub repo `larwehpaul36/civicpulse`. Vercel project `civicpulse` (domain `civicpulse-live.vercel.app`). Supabase free plan; preview and production share ONE database.
+- Claude's sandbox has no npm access and cannot reach the owner's GitHub or Supabase. Claude never pushes, merges or runs SQL for the owner: it delivers zips of changed files plus numbered steps.
+- **Always give numbered, copy-paste steps** (see HOW WE WORK) and say what to expect at each step.
+- Git: pushes sometimes hang on this network. Use `git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 push`; a phone hotspot is the fallback. If git opens the Vim editor for a merge message: press `Esc`, type `:wq`, Enter. Optional: `git config --global core.editor "code --wait"`.
+- Do not `git checkout main` with uncommitted changes (it aborts safely): commit first. Bring `main` into a feature branch with `git merge main` before the pull request.
+- The Supabase CLI is not installed: use `npx supabase@latest ...` (login, then link --project-ref, then deploy).
+- Screenshots are the best way for the owner to show results; pasted tables lose columns.
+- ESLint here has no react-hooks plugin: do not add `eslint-disable react-hooks/...` comments.
+
+## Added 12 Nov 2026 (evening): after-photo privacy and SQL tests in CI
+- `components/AdminIssue.js`: the moderator's "after" photo has the same hide-faces-and-plates step as residents' photos.
+- `scripts/run-sql-tests.sh` runs all `tests/*_stub_test.sql` (directory, hardening 121 checks, issue links, notifications, replies 36 checks), each in its own throwaway database. New job `sql` in `.github/workflows/ci.yml` runs it on every pull request against a disposable Postgres in GitHub's cloud (never your Supabase). Locally: `PGHOST=localhost PGUSER=postgres bash scripts/run-sql-tests.sh` against a Postgres you do not mind using. Not included: `tests/schema_smoke_test.sql` (needs PostGIS; prints instead of failing).
+- Verified here: all 5 SQL tests pass with the script. Not verified: the GitHub job itself (first run will be on the pull request) and the after-photo screen in a browser.
 
 ## Added 12 Nov 2026: office right of reply (needs migration 021)
 - Assumptions made (not yet confirmed by the owner): moderators relay replies (no office sign-in); an office can post a reply, an expected date, or "not our responsibility"; it cannot mark a report fixed. Details: `docs/office-replies.md`.

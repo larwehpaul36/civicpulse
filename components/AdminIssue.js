@@ -7,6 +7,7 @@ import { compressImage } from '@/lib/compressImage';
 import { linksOf, otherEnd, parseIssueId, suggestions } from '@/lib/relatedIssues';
 import { strings as s } from '@/lib/strings';
 import AdminReplyForm from '@/components/AdminReplyForm';
+import PhotoBlur from '@/components/PhotoBlur';
 
 const A = s.admin;
 const photoUrl = (path) => supabase.storage.from('issue-photos').getPublicUrl(path).data.publicUrl;
@@ -231,6 +232,7 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
               <label>{A.afterPhoto}
                 <input type="file" accept="image/*" capture="environment" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
               </label>
+              <PhotoBlur file={file} onApply={setFile} />
               <p><button type="button" disabled={busy} onClick={markResolved}>{A.markResolved}</button></p>
             </>
           )}
