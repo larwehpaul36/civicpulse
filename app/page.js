@@ -1,3 +1,5 @@
+'use client';
+// A client page so the three steps below switch language with the rest of the home page.
 import HomeHero from '@/components/HomeHero';
 import ReportForm from '@/components/ReportForm';
 import { home as h } from '@/lib/homeStrings';
