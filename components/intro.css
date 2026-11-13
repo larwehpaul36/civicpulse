@@ -1,0 +1,22 @@
+/* "New here?" note, About page and the iPhone install guide. Kept in its own file. */
+.newhere { display:flex; gap:1rem; align-items:flex-start; justify-content:space-between; max-width:72rem; margin:1rem auto; padding:1rem 1.25rem;
+  border:2px solid var(--line); border-radius:var(--radius); background:var(--surface); }
+.newhere-title { margin:0 0 .25rem; font-size:1.15rem; font-weight:700; }
+.newhere p { margin:.25rem 0; }
+.newhere button { flex:none; }
+@media (max-width: 40rem) { .newhere { flex-direction:column; margin:1rem; } }
+
+.about h2 { margin-top:1.75rem; }
+.about-lead { font-size:1.2rem; line-height:1.5; max-width:46rem; }
+.about-steps, .about-links { padding-left:0; list-style:none; display:grid; gap:.75rem; max-width:46rem; }
+.about-steps { counter-reset:step; }
+.about-steps li { counter-increment:step; display:grid; gap:.15rem; padding:.75rem 1rem .75rem 3.25rem; position:relative;
+  border:2px solid var(--line); border-radius:var(--radius); background:var(--surface); }
+.about-steps li::before { content:counter(step); position:absolute; left:.9rem; top:.7rem; width:1.7rem; height:1.7rem; border-radius:50%;
+  display:grid; place-items:center; font-weight:700; background:#f2b705; color:#0e1f17; }
+.about-links li { display:grid; gap:.1rem; }
+.about-links a { font-weight:700; }
+
+.installguide { margin:.75rem 0; padding:.75rem 1rem; border:2px solid var(--line); border-radius:var(--radius); background:var(--surface); }
+.installguide summary { cursor:pointer; font-weight:700; min-height:44px; display:flex; align-items:center; }
+.installguide ol { padding-left:1.4rem; display:grid; gap:.5rem; }

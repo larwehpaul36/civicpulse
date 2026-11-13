@@ -2,11 +2,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import MyReportsLink from '@/components/MyReportsLink';
-import LanguageSwitch from '@/components/LanguageSwitch';
 import { strings as s } from '@/lib/strings';
 import { home as h } from '@/lib/homeStrings';
+import '@/components/nav-about.css';
 
-const LINKS = [['/', 'navReport', 'navhome'], ['/issues', 'navIssues'], ['/tracker', 'navTracker'], ['/directory', 'navDirectory']];
+const LINKS = [['/', 'navReport', 'navhome'], ['/issues', 'navIssues'], ['/tracker', 'navTracker'], ['/directory', 'navDirectory'], ['/about', 'navAbout', 'navabout']];
 
 export default function Nav() {
   const path = usePathname();
@@ -29,7 +29,6 @@ export default function Nav() {
           </Link>
           {LINKS.slice(3).map(link)}
           <MyReportsLink />
-          <LanguageSwitch />
         </nav>
       </div>
     </header>

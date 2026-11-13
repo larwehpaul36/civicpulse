@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { home as h } from '@/lib/homeStrings';
 import { strings as s } from '@/lib/strings';
 import { partyStats, sortParties } from '@/lib/trackerStats';
+import NewHere from '@/components/NewHere';
 
 const S = 520, PAD = 70;
 
@@ -51,6 +52,7 @@ export default function HomeHero() {
 
   return (
     <>
+      <NewHere />
       <section className="hx">
         <div>
           <span className="hx-live reveal"><i />{h.live}</span>
@@ -64,6 +66,7 @@ export default function HomeHero() {
             <Link className="cta ghost" href="/tracker">{h.ctaTracker} →</Link>
           </div>
           <div className="hx-trust reveal" style={{ '--i': 4 }}>{h.trust.map((x) => <span key={x}>✓ {x}</span>)}</div>
+          <p className="reveal" style={{ '--i': 5, marginTop: '.75rem' }}><Link href="/about">{s.intro.more} →</Link></p>
         </div>
 
         <div className="mapcard reveal" style={{ '--i': 2 }} role="img" aria-label={rows ? h.mapNote(total) : h.mapTag}>
