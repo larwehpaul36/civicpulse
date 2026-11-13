@@ -1,0 +1,2 @@
+/* The About link sits in the top bar on computers. On phones the bottom bar is already full, so it is reached from the home page instead. */
+@media (max-width:40rem) { .nav .navabout { display:none; } }

@@ -4,6 +4,7 @@ import {
   EMAIL_NOTICES, clearContact, disablePush, enablePush, getContact, pushState, relinkPush, saveContact,
 } from '@/lib/notifications';
 import { strings as s } from '@/lib/strings';
+import InstallGuide from '@/components/InstallGuide';
 
 function PushSettings() {
   const [state, setState] = useState('checking'); // checking | unsupported | blocked | on | off
@@ -28,6 +29,7 @@ function PushSettings() {
       <h2>{s.push.title}</h2>
       <p>{s.push.explain}</p>
       {state === 'unsupported' && <p className="hint">{s.push.unsupported}</p>}
+      {state === 'unsupported' && <InstallGuide open />}
       {state === 'blocked' && <p className="hint">{s.push.blocked}</p>}
       {state === 'on' && (
         <>
