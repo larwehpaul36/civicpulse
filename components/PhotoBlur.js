@@ -3,7 +3,7 @@
 // Everything happens on the phone; the original photo is never uploaded when boxes are applied.
 import { useEffect, useRef, useState } from 'react';
 import { strings as s } from '@/lib/strings';
-import { normRect, isUsableRect, grow, pixelateAll } from '@/lib/blur';
+import { normRect, isUsableRect, grow, pixelateAll, defaultBox, stepSize, nudge, resize } from '@/lib/blur';
 
 const MAX_SIDE = 1280;
 
@@ -13,13 +13,14 @@ export default function PhotoBlur({ file, onApply }) {
   const [drag, setDrag] = useState(null); // { a, b } in canvas pixels
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const [kb, setKb] = useState(null); // one box moved with buttons: { x, y, w, h }
   const canvasRef = useRef(null);
   const baseRef = useRef(null); // untouched ImageData of the working copy
   const t = s.blur;
   const canDetect = typeof window !== 'undefined' && 'FaceDetector' in window;
 
   // Reset when a different photo is chosen.
-  useEffect(() => { setOpen(false); setRects([]); setDrag(null); setMsg(''); baseRef.current = null; }, [file]);
+  useEffect(() => { setOpen(false); setRects([]); setDrag(null); setKb(null); setMsg(''); baseRef.current = null; }, [file]);
 
   // Load the photo into the working canvas when the editor opens.
   useEffect(() => {
@@ -55,7 +56,18 @@ export default function PhotoBlur({ file, onApply }) {
       ctx.strokeRect(r.x, r.y, r.w, r.h);
     }
   }
-  useEffect(() => { paint(rects, drag); }, [rects, drag]);
+  useEffect(() => {
+    const live = drag || (kb ? { a: { x: kb.x, y: kb.y }, b: { x: kb.x + kb.w, y: kb.y + kb.h } } : null);
+    paint(rects, live);
+  }, [rects, drag, kb]);
+
+  // Buttons for people who cannot drag: start a box in the middle, move and resize it, then hide it.
+  const dims = () => { const c = canvasRef.current; return [c.width, c.height]; };
+  function kbStart() { const [w, h] = dims(); setKb(defaultBox(w, h)); setMsg(t.kbStarted); }
+  function kbMove(dx, dy) { const [w, h] = dims(), st = stepSize(w, h); setKb((r) => nudge(r, dx * st, dy * st, w, h)); }
+  function kbSize(d) { const [w, h] = dims(), st = stepSize(w, h); setKb((r) => resize(r, d * st, d * st, w, h)); }
+  function kbHide() { setRects((l) => [...l, kb]); setKb(null); setMsg(''); }
+
 
   const point = (e) => {
     const c = canvasRef.current, box = c.getBoundingClientRect();
@@ -105,6 +117,25 @@ export default function PhotoBlur({ file, onApply }) {
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)}
       />
       <p className="hint" role="status" aria-live="polite">{msg || t.count(rects.length)}</p>
+      {kb ? (
+        <div className="kbbox" role="group" aria-label={t.kbTitle}>
+          <p className="hint">{t.kbHelp}</p>
+          <div className="row">
+            <button type="button" className="secondary" onClick={() => kbMove(-1, 0)}>{t.left}</button>
+            <button type="button" className="secondary" onClick={() => kbMove(0, -1)}>{t.up}</button>
+            <button type="button" className="secondary" onClick={() => kbMove(0, 1)}>{t.down}</button>
+            <button type="button" className="secondary" onClick={() => kbMove(1, 0)}>{t.right}</button>
+          </div>
+          <div className="row">
+            <button type="button" className="secondary" onClick={() => kbSize(1)}>{t.bigger}</button>
+            <button type="button" className="secondary" onClick={() => kbSize(-1)}>{t.smaller}</button>
+            <button type="button" onClick={kbHide}>{t.hideBox}</button>
+            <button type="button" className="secondary" onClick={() => setKb(null)}>{t.cancelBox}</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="secondary" onClick={kbStart}>{t.kbStart}</button>
+      )}
       <div className="row">
         {canDetect && <button type="button" className="secondary" onClick={findFaces} disabled={busy}>{t.findFaces}</button>}
         <button type="button" className="secondary" onClick={() => setRects((l) => l.slice(0, -1))} disabled={!rects.length}>{t.undo}</button>

@@ -3,6 +3,8 @@ import Nav from '@/components/Nav';
 import SyncBanner from '@/components/SyncBanner';
 import PhoneVerifyProvider from '@/components/PhoneVerify';
 import LangProvider from '@/components/LangProvider';
+import SiteFooter from '@/components/SiteFooter';
+import { INIT_SCRIPT } from '@/lib/textSize';
 import { strings as s } from '@/lib/strings';
 
 const site = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL ? 'https://civicpulse-live.vercel.app' : 'http://localhost:3000');
@@ -20,7 +22,8 @@ export const viewport = { themeColor: '#14231c' };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: INIT_SCRIPT }} /></head>
       <body>
         <LangProvider>
           <a className="skip" href="#main">{s.a11y.skip}</a>
@@ -28,6 +31,7 @@ export default function RootLayout({ children }) {
             <Nav />
             <SyncBanner />
             <div id="main" tabIndex={-1}>{children}</div>
+            <SiteFooter />
           </PhoneVerifyProvider>
         </LangProvider>
       </body>

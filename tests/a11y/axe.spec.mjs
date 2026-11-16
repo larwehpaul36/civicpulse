@@ -25,7 +25,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 for (const scheme of ['light', 'dark']) {
-  for (const path of ['/', '/issues', '/tracker', '/directory', '/my', '/offline', '/privacy']) {
+  for (const path of ['/', '/issues', '/tracker', '/directory', '/my', '/offline', '/privacy', '/about', '/accessibility']) {
     test(`${path} has no serious accessibility problems (${scheme})`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
       await page.goto(path);

@@ -1,0 +1,15 @@
+/* Footer, text-size control, and the keyboard box controls in the photo editor. */
+html[data-textsize='large'] { font-size: 112.5%; }
+html[data-textsize='larger'] { font-size: 125%; }
+
+.sitefooter { max-width: 60rem; margin: 2.5rem auto 0; padding: 1.25rem 1rem 1.5rem; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; justify-content: space-between; }
+.sitefooter nav { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; }
+.sitefooter nav a { min-height: 44px; display: inline-flex; align-items: center; color: var(--ink); font-weight: 600; }
+.textsize { display: flex; align-items: center; gap: .4rem; }
+.textsize-label { color: var(--muted); font-size: .9rem; margin-right: .2rem; }
+.textsize button { min-width: 44px; margin: 0; padding: 0 .6rem; }
+.textsize button[aria-pressed='true'] { background: var(--ink); color: var(--paper); box-shadow: none; }
+.ts-normal { font-size: .9rem; } .ts-large { font-size: 1.1rem; } .ts-larger { font-size: 1.35rem; }
+
+.kbbox { margin: .5rem 0; }
+.kbbox .row { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .5rem; }
