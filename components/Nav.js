@@ -6,6 +6,7 @@ import LanguageSwitch from '@/components/LanguageSwitch';
 import { strings as s } from '@/lib/strings';
 import { home as h } from '@/lib/homeStrings';
 import '@/components/nav-about.css';
+import '@/components/topbar.css';
 
 const LINKS = [['/', 'navReport', 'navhome'], ['/issues', 'navIssues'], ['/tracker', 'navTracker'], ['/directory', 'navDirectory'], ['/about', 'navAbout', 'navabout']];
 
@@ -30,8 +31,8 @@ export default function Nav() {
           </Link>
           {LINKS.slice(3).map(link)}
           <MyReportsLink />
-          <LanguageSwitch />
         </nav>
+        <div className="topbar-tools"><LanguageSwitch /></div>
       </div>
     </header>
   );
