@@ -27,3 +27,9 @@ test('bar labels never wrap onto two lines', () => {
   const css = fs.readFileSync(new URL('../components/topbar.css', import.meta.url), 'utf8');
   assert.match(css, /\.nav a[^{]*\{[^}]*white-space:\s*nowrap/);
 });
+
+test('phone bottom bar keeps five equal columns so the camera button stays centred in any language', () => {
+  const css = fs.readFileSync(new URL('../components/topbar.css', import.meta.url), 'utf8');
+  assert.match(css, /grid-template-columns:\s*1fr 1fr 76px 1fr 1fr/);
+  assert.match(nav, /<NavIcon href=\{href\} \/>/);
+});

@@ -17,3 +17,19 @@
 
 /* Phone: brand on the left, language on the right; the bottom bar keeps only the four tabs and the camera button. */
 @media (max-width: 40rem) { .topbar .langswitch { padding: 0 .75rem; font-size: .8rem; max-width: 6.5rem; } }
+
+/* ---- Phone bottom bar: icon above a short label, five equal columns, camera locked in the exact centre ----
+   Whatever the language, a long label wraps inside its own column; it can never push the camera off-centre or run off the edge. */
+.navicon { display: none; }
+@media (max-width: 40rem) {
+  body { padding-bottom: 5.5rem; }
+  .topbar .nav { display: grid; grid-template-columns: 1fr 1fr 76px 1fr 1fr; align-items: center; justify-content: normal; gap: 0; padding: .35rem .3rem; }
+  .topbar .nav a {
+    position: relative; min-width: 0; min-height: 52px; padding: .3rem .15rem; gap: .15rem;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    font-size: .7rem; line-height: 1.1; white-space: normal; overflow-wrap: anywhere; flex: none;
+  }
+  .topbar .nav a.fab { justify-self: center; width: 62px; min-height: 0; padding: 0; }
+  .navicon { display: block; width: 22px; height: 22px; flex: none; }
+  .topbar .nav .badge { position: absolute; top: .1rem; left: calc(50% + .35rem); margin: 0; min-width: 1.1rem; padding: 0 .3rem; font-size: .65rem; line-height: 1.2; }
+}
