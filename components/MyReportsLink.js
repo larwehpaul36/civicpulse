@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { unreadCount } from '@/lib/notifications';
 import { strings as s } from '@/lib/strings';
+import NavIcon from '@/components/NavIcon';
 
 // Nav link to "My reports", with the number of updates not seen yet.
 export default function MyReportsLink() {
@@ -23,7 +24,8 @@ export default function MyReportsLink() {
 
   return (
     <Link href="/my" aria-current={path === '/my' ? 'page' : undefined}>
-      {s.navMine}
+      <NavIcon href="/my" />
+      <span className="navlabel">{s.navMine}</span>
       {count > 0 && <span className="badge" aria-label={s.mine.unread(count)}>{count}</span>}
     </Link>
   );

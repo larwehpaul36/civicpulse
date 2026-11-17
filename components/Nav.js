@@ -3,16 +3,18 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import MyReportsLink from '@/components/MyReportsLink';
 import LanguageSwitch from '@/components/LanguageSwitch';
+import NavIcon from '@/components/NavIcon';
 import { strings as s } from '@/lib/strings';
 import { home as h } from '@/lib/homeStrings';
 import '@/components/nav-about.css';
+import '@/components/topbar.css';
 
 const LINKS = [['/', 'navReport', 'navhome'], ['/issues', 'navIssues'], ['/tracker', 'navTracker'], ['/directory', 'navDirectory'], ['/about', 'navAbout', 'navabout']];
 
 export default function Nav() {
   const path = usePathname();
   const link = ([href, key, cls]) => (
-    <Link key={href} href={href} className={cls} aria-current={path === href ? 'page' : undefined}>{s[key]}</Link>
+    <Link key={href} href={href} className={cls} aria-current={path === href ? 'page' : undefined}><NavIcon href={href} /><span className="navlabel">{s[key]}</span></Link>
   );
   return (
     <header className="topbar">
@@ -30,8 +32,8 @@ export default function Nav() {
           </Link>
           {LINKS.slice(3).map(link)}
           <MyReportsLink />
-          <LanguageSwitch />
         </nav>
+        <div className="topbar-tools"><LanguageSwitch /></div>
       </div>
     </header>
   );
