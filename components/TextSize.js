@@ -1,18 +1,23 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { strings as s } from '@/lib/strings';
-import { SIZES, readSize, saveSize } from '@/lib/textSize';
+import { SIZES, EVENT, readSize, saveSize, applySize } from '@/lib/textSize';
 
 // Three buttons that make all text bigger on this device. aria-pressed tells screen readers which one is on.
+// Stays in step with the "Aa" button in the top bar through a page event.
 export default function TextSize() {
   const [size, setSize] = useState('normal');
   const t = s.footer;
-  useEffect(() => { setSize(readSize(window.localStorage)); }, []);
+  useEffect(() => {
+    const sync = () => setSize(readSize(window.localStorage));
+    sync();
+    window.addEventListener(EVENT, sync);
+    return () => window.removeEventListener(EVENT, sync);
+  }, []);
   function choose(v) {
-    setSize(v);
-    if (v === 'normal') document.documentElement.removeAttribute('data-textsize');
-    else document.documentElement.setAttribute('data-textsize', v);
+    setSize(applySize(document.documentElement, v));
     saveSize(window.localStorage, v);
+    window.dispatchEvent(new Event(EVENT));
   }
   return (
     <div className="textsize" role="group" aria-label={t.textSize}>
