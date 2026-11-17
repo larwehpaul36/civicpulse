@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normRect, isUsableRect, blockSize, grow, pixelate, pixelateAll } from '../lib/blur.js';
+import { normRect, isUsableRect, blockSize, grow, pixelate, pixelateAll, defaultBox, stepSize, nudge, resize } from '../lib/blur.js';
 
 // A W x H image where every pixel has a different colour, so any change is visible.
 function image(W, H) {
@@ -59,4 +59,45 @@ test('boxes partly or fully outside the image do not throw or write outside', ()
   const W = 20, H = 20, d = image(W, H), len = d.length;
   pixelateAll(d, W, H, [{ x: 15, y: 15, w: 50, h: 50 }, { x: 100, y: 100, w: 30, h: 30 }, { x: -10, y: -10, w: 15, h: 15 }]);
   assert.equal(d.length, len);
+});
+
+// ---- buttons instead of dragging ----
+
+test('the starting box is usable and sits in the middle', () => {
+  const r = defaultBox(1000, 600);
+  assert.ok(isUsableRect(r));
+  assert.equal(r.x + r.w / 2, 500);
+  assert.equal(r.y + r.h / 2, 300);
+});
+
+test('a tiny photo still gets a usable starting box', () => {
+  assert.ok(isUsableRect(defaultBox(30, 20)));
+});
+
+test('one press moves by a few percent of the photo, never less than 4 px', () => {
+  assert.equal(stepSize(1000, 600), 50);
+  assert.equal(stepSize(40, 40), 4);
+});
+
+test('nudge moves the box and stops at every edge without changing its size', () => {
+  const r = { x: 100, y: 100, w: 50, h: 40 };
+  assert.deepEqual(nudge(r, 20, -10, 400, 300), { x: 120, y: 90, w: 50, h: 40 });
+  assert.deepEqual(nudge(r, -999, -999, 400, 300), { x: 0, y: 0, w: 50, h: 40 });
+  assert.deepEqual(nudge(r, 999, 999, 400, 300), { x: 350, y: 260, w: 50, h: 40 });
+});
+
+test('resize grows around the centre, keeps a minimum and stays inside the photo', () => {
+  const r = { x: 100, y: 100, w: 40, h: 40 };
+  assert.deepEqual(resize(r, 20, 20, 400, 300), { x: 90, y: 90, w: 60, h: 60 });
+  const small = resize(r, -999, -999, 400, 300);
+  assert.equal(small.w, 12); assert.equal(small.h, 12);
+  const big = resize({ x: 0, y: 0, w: 200, h: 200 }, 9999, 9999, 400, 300);
+  assert.deepEqual(big, { x: 0, y: 0, w: 400, h: 300 });
+});
+
+test('a box made with the buttons can always be applied', () => {
+  let r = defaultBox(400, 300);
+  for (let i = 0; i < 40; i++) r = nudge(r, 50, 50, 400, 300);
+  for (let i = 0; i < 40; i++) r = resize(r, -50, -50, 400, 300);
+  assert.ok(isUsableRect(r));
 });

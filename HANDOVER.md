@@ -291,3 +291,24 @@ What I need now: [e.g. "walk me through running 014-020 and the live check" or "
 
 Ask me up to 3 questions before you start.
 ```
+
+
+---
+
+## SESSION LOG, 12-13 Nov 2026 (later part)
+
+### Merged earlier in this stretch
+- About page (`/about`), "New here?" note on home, iPhone Home-Screen guide for notifications (PR #6). See docs/about-and-ios-guide.md.
+- LESSON / REGRESSION: the About zip carried an OLD Nav.js and removed the language picker from production. Fix delivered as CivicPulse-nav-fix.zip (branch fix/restore-language-switch) plus tests/nav.test.mjs which guards Nav.js. RULE: never deliver a shared file (Nav.js, layout.js, strings.js, globals.css) from an old zip; base it on the latest merged state and warn when a delivery overwrites one.
+- The language picker is hidden on production by design until a language is `live` (or NEXT_PUBLIC_SHOW_UNREVIEWED_LANGS=1, Preview only). Ga and Ewe have status `empty`, so they do not show.
+
+### Built, awaiting merge: accessibility (branch feature/accessibility)
+See docs/accessibility.md. Footer + text size, /accessibility page, button-operated photo hiding, axe now covers /about and /accessibility.
+Depends on the Nav fix being merged first (layout.js is edited; Nav.js is not).
+
+### Still open
+- Language reviews (Twi, Hausa) and Ga/Ewe translations via translations/review-*.csv; then status draft -> live.
+- Set NEXT_PUBLIC_CONTACT_EMAIL (About, Privacy and Accessibility pages show "coming soon" without it).
+- Confirm the About page claims (independent, free, anyone in Ghana).
+- Real-device checks: iPhone guide, push for office replies, /my "The office replied".
+- Possible: language picker may be crowded in the phone bottom bar once a language is live. Check on a phone.
