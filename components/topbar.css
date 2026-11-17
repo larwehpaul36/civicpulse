@@ -33,3 +33,15 @@
   .navicon { display: block; width: 22px; height: 22px; flex: none; }
   .topbar .nav .badge { position: absolute; top: .1rem; left: calc(50% + .35rem); margin: 0; min-width: 1.1rem; padding: 0 .3rem; font-size: .65rem; line-height: 1.2; }
 }
+
+/* Report (home) and About are not tabs on a phone: home is the camera button, About lives in the footer.
+   This must come after the layout rule above, which would otherwise show them again. */
+@media (max-width: 40rem) {
+  .topbar .nav a.navhome, .topbar .nav a.navabout { display: none; }
+}
+
+/* Very small phones (about 360px wide and under): slightly smaller labels so words are not split. */
+@media (max-width: 22.5rem) {
+  .topbar .nav { grid-template-columns: 1fr 1fr 68px 1fr 1fr; padding-left: .15rem; padding-right: .15rem; }
+  .topbar .nav a { font-size: .62rem; padding-left: .05rem; padding-right: .05rem; overflow-wrap: break-word; }
+}

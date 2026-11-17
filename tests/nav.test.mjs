@@ -33,3 +33,11 @@ test('phone bottom bar keeps five equal columns so the camera button stays centr
   assert.match(css, /grid-template-columns:\s*1fr 1fr 76px 1fr 1fr/);
   assert.match(nav, /<NavIcon href=\{href\} \/>/);
 });
+
+test('Report (home) and About stay hidden on phones, after the layout rule that could show them again', () => {
+  const css = fs.readFileSync(new URL('../components/topbar.css', import.meta.url), 'utf8');
+  const hide = css.indexOf('.topbar .nav a.navhome, .topbar .nav a.navabout { display: none; }');
+  const layout = css.indexOf('display: flex; flex-direction: column');
+  assert.ok(hide > -1, 'hiding rule missing');
+  assert.ok(hide > layout, 'hiding rule must come after the rule that sets display:flex');
+});
