@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { SIZES, KEY, cleanSize, readSize, saveSize, INIT_SCRIPT } from '../lib/textSize.js';
+import { SIZES, KEY, cleanSize, readSize, saveSize, INIT_SCRIPT, nextSize, applySize } from '../lib/textSize.js';
 
 const fake = (init = {}) => { const m = { ...init }; return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = v; }, m }; };
 
@@ -51,4 +51,26 @@ test('the footer links to pages that exist', () => {
     const file = new URL(`../app${path}/page.js`, import.meta.url);
     assert.doesNotThrow(() => readFileSync(file), `footer links to ${path} but app${path}/page.js is missing`);
   }
+});
+
+test('the Aa button cycles Normal -> Large -> Largest -> Normal, and a bad value starts over', () => {
+  assert.equal(nextSize('normal'), 'large');
+  assert.equal(nextSize('large'), 'larger');
+  assert.equal(nextSize('larger'), 'normal');
+  assert.equal(nextSize('junk'), 'large');
+});
+
+test('applySize sets and clears the page attribute and ignores bad values', () => {
+  const attrs = {};
+  const root = { setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: (k) => { delete attrs[k]; } };
+  assert.equal(applySize(root, 'larger'), 'larger'); assert.deepEqual(attrs, { 'data-textsize': 'larger' });
+  assert.equal(applySize(root, 'normal'), 'normal'); assert.deepEqual(attrs, {});
+  assert.equal(applySize(root, 'evil'), 'normal'); assert.deepEqual(attrs, {});
+});
+
+test('the top bar has the Aa button and the footer one listens for the same event', () => {
+  const read = (f) => readFileSync(new URL(f, import.meta.url), 'utf8');
+  assert.match(read('../components/Nav.js'), /<TextSizeButton \/>/);
+  assert.match(read('../components/TextSize.js'), /addEventListener\(EVENT/);
+  assert.match(read('../components/TextSizeButton.js'), /dispatchEvent\(new Event\(EVENT\)\)/);
 });
