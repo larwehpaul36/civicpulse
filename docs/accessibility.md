@@ -22,3 +22,10 @@ Answers the "accessibility evidence" point of the first-time-user assessment.
 2. Make a report, choose a photo, open "Hide faces...", press "Add a box with buttons", move it with the buttons, press "Hide this box": the area becomes a mosaic.
 3. Footer: press Largest; all text grows and stays readable on a phone width. Reload: size is remembered. Press Normal to go back.
 4. Screen reader (TalkBack on Android or VoiceOver on iPhone): on the footer, each size button is announced as "Text size: Large, button, pressed/not pressed".
+
+## Phone top bar (16-18 Nov 2026)
+- Top bar on phones: logo, "Aa" text size (cycles Normal/Large/Largest), language pill, "☰" menu (About, Accessibility, Privacy, Open data). The menu is hidden on computers, where About is in the top bar and the rest are in the footer. The footer links stay as a backup.
+- The bottom bar has icon + short label tabs in five equal columns; the camera is always centred (`components/topbar.css`, guarded by `tests/nav.test.mjs`).
+- Language pill shows a short code (EN, TW, HA, EE, GA) on phones narrower than 344px so the bar fits (`lib/languageLabel.js`).
+- Lesson: render every layout change (Playwright + the real CSS, 320/360/390px, English and Hausa, light and dark) before delivering it. A rule with a higher specificity re-showed hidden tabs once.
+- Not yet checked on a real Android phone. Send screenshots when testing.

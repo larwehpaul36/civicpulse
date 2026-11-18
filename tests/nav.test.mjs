@@ -20,7 +20,7 @@ test('the whole app is wrapped in the language provider', () => {
 test('the language switch is in the top bar, NOT inside the phone bottom bar (it overflowed there)', () => {
   const navBlock = nav.slice(nav.indexOf('<nav className="nav"'), nav.indexOf('</nav>'));
   assert.ok(!navBlock.includes('LanguageSwitch'), 'LanguageSwitch must not be inside <nav className="nav">');
-  assert.match(nav, /<div className="topbar-tools"><TextSizeButton \/><LanguageSwitch \/><\/div>/);
+  assert.match(nav, /<div className="topbar-tools"><TextSizeButton \/><LanguageSwitch \/><MenuButton \/><\/div>/);
 });
 
 test('bar labels never wrap onto two lines', () => {

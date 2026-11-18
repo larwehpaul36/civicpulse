@@ -312,3 +312,9 @@ Depends on the Nav fix being merged first (layout.js is edited; Nav.js is not).
 - Confirm the About page claims (independent, free, anyone in Ghana).
 - Real-device checks: iPhone guide, push for office replies, /my "The office replied".
 - Possible: language picker may be crowded in the phone bottom bar once a language is live. Check on a phone.
+
+### 16-18 Nov 2026: phone top bar and menu
+- Merge order used: feature/accessibility, fix/topbar-and-phone-bar, then feature/aa-button (Aa button), then feature/menu-button (this one).
+- Language picker shows only when a language is `live`, or on Vercel PREVIEW when NEXT_PUBLIC_SHOW_UNREVIEWED_LANGS=1 (baked at build time: redeploy after changing it). Production shows English only until reviews are done.
+- Hausa wording in preview pictures of the menu was a placeholder, not reviewed text.
+- Owner open items: test on a real Android phone and iPhone; Twi/Hausa reviews; Ga/Ewe translations; NEXT_PUBLIC_CONTACT_EMAIL.

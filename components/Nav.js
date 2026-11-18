@@ -5,6 +5,7 @@ import MyReportsLink from '@/components/MyReportsLink';
 import LanguageSwitch from '@/components/LanguageSwitch';
 import NavIcon from '@/components/NavIcon';
 import TextSizeButton from '@/components/TextSizeButton';
+import MenuButton from '@/components/MenuButton';
 import { strings as s } from '@/lib/strings';
 import { home as h } from '@/lib/homeStrings';
 import '@/components/nav-about.css';
@@ -34,7 +35,7 @@ export default function Nav() {
           {LINKS.slice(3).map(link)}
           <MyReportsLink />
         </nav>
-        <div className="topbar-tools"><TextSizeButton /><LanguageSwitch /></div>
+        <div className="topbar-tools"><TextSizeButton /><LanguageSwitch /><MenuButton /></div>
       </div>
     </header>
   );
