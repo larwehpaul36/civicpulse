@@ -37,3 +37,13 @@ A first-time user said the photo field should be marked required: people only le
 - The rules live in `lib/reportRules.js` (tested). Required: problem type, photo, "Other" wording (only for Other), region, spot on the map. Optional: seriousness, district, details.
 - Screen readers already had `aria-required`; they now also hear the message through `aria-describedby` and `aria-invalid`.
 - New English strings are in `strings.req`; Twi and Hausa show English for them until reviewed (they will appear in the next review CSV export).
+
+## Required fields on the other forms (18 Nov 2026)
+Same idea as the report form, using `lib/formRules.js` (tested) and the shared star in `components/Req.js`.
+- Suggest an office (`DirectoryForm`): new office needs name, type, area and at least one problem type; adding coverage needs area and a problem type; "this entry is wrong" needs a note of 5+ characters; a plain correction needs nothing here.
+- Moderator office reply (`AdminReplyForm`): an expected date needs the date (words optional); a reply or "not our job" needs the words. Matches `checkReply` (tested).
+- Email boxes (`KeepAccount`, `NotificationSettings`): one field each, so no star. The button is no longer silently greyed out; pressing it with an empty or wrong box says what is wrong, in the app's own wording, and puts the cursor there. The updates form also asks for the consent tick.
+- The browser's own "required" pop-ups are turned off on these forms (`noValidate`): they appeared only on Send, in the browser's language.
+- Tidy-ups: the "Problems they handle" list is flat (the label no longer cuts across a box line) and shows a red outline when missing; the date box now matches the other fields; the moderator's form has even spacing and a full-width Publish button.
+- The phone check (`PhoneVerify`) was left alone: one field, and it already shows its own error.
+- Checked by running the real forms in a browser with a stub database (27 behaviours: messages, cursor, messages clearing, nothing sent while incomplete, exact payloads).
