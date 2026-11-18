@@ -318,3 +318,8 @@ Depends on the Nav fix being merged first (layout.js is edited; Nav.js is not).
 - Language picker shows only when a language is `live`, or on Vercel PREVIEW when NEXT_PUBLIC_SHOW_UNREVIEWED_LANGS=1 (baked at build time: redeploy after changing it). Production shows English only until reviews are done.
 - Hausa wording in preview pictures of the menu was a placeholder, not reviewed text.
 - Owner open items: test on a real Android phone and iPhone; Twi/Hausa reviews; Ga/Ewe translations; NEXT_PUBLIC_CONTACT_EMAIL.
+
+### 18 Nov 2026: required-field markers
+- Report form (PR: feature/required-fields) and the other forms (feature/required-fields-forms). See docs/accessibility.md. Trigger: a first-time user said the photo field should be marked required.
+- Not changed: PhoneVerify (single field, has its own error); admin sign-in and admin "new party" forms still use native `required` (moderators only).
+- New English strings are in strings.req; Twi/Hausa fall back to English until the next review CSV export.

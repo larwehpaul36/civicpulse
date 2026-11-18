@@ -6,6 +6,8 @@ import { disablePush } from '@/lib/notifications';
 import { EMAIL_ACCOUNTS, accountState, addEmailOrSignIn, requestSignIn, signOutHere } from '@/lib/emailAccount';
 import { claimPending, prepareMerge } from '@/lib/mergeTicket';
 import { strings as s } from '@/lib/strings';
+import { emailProblem } from '@/lib/formRules';
+import '@/components/forms.css';
 
 const A = s.account;
 const errorText = (err) => ({ bad_email: A.bad, too_soon: A.tooSoon, email_off: A.off, prepare_failed: A.prepareFailed }[err?.message] ?? A.failed);
@@ -26,6 +28,13 @@ export default function KeepAccount({ hasReports = false, onMerged }) {
   const [msg, setMsg] = useState('');
   const [signInMsg, setSignInMsg] = useState('');
   const [asked, setAsked] = useState('');
+  const [triedAdd, setTriedAdd] = useState(false); // pressed the button with the box empty or wrong
+  const [triedIn, setTriedIn] = useState(false);
+  const addRef = useRef(null);
+  const inRef = useRef(null);
+  const emailText = (p) => (p === 'empty' ? s.req.email : p === 'bad' ? s.req.emailBad : null);
+  const addText = triedAdd ? emailText(emailProblem(email)) : null;
+  const inText = triedIn ? emailText(emailProblem(signInEmail)) : null;
   const claiming = useRef(false);
 
   useEffect(() => { setAsked(askedGet()); }, []);
@@ -64,12 +73,13 @@ export default function KeepAccount({ hasReports = false, onMerged }) {
 
   async function addEmail(e) {
     e.preventDefault();
+    if (emailProblem(email)) { setTriedAdd(true); setMsg(''); addRef.current?.focus(); return; }
     setBusy('add'); setMsg('');
     try {
       const sent = await addEmailOrSignIn({ supabase, ensureUser, getCaptchaToken, prepare }, email, backHere());
       setMsg(A.sentTo(sent));
       askedSet(sent); setAsked(sent);
-      setEmail('');
+      setEmail(''); setTriedAdd(false);
       const { data } = await supabase.auth.getUser().catch(() => ({ data: null }));
       if (data?.user) setUser(data.user);
     } catch (err) { console.error(err); setMsg(errorText(err)); }
@@ -78,11 +88,12 @@ export default function KeepAccount({ hasReports = false, onMerged }) {
 
   async function signIn(e) {
     e.preventDefault();
+    if (emailProblem(signInEmail)) { setTriedIn(true); setSignInMsg(''); inRef.current?.focus(); return; }
     setBusy('signin'); setSignInMsg('');
     try {
       await prepare(signInEmail.trim().toLowerCase());
       const sent = await requestSignIn({ supabase, getCaptchaToken }, signInEmail, backHere());
-      setSignInMsg(A.signInSent(sent)); setSignInEmail(''); askedSet(sent); setAsked(sent);
+      setSignInMsg(A.signInSent(sent)); setSignInEmail(''); setTriedIn(false); askedSet(sent); setAsked(sent);
     }
     catch (err) { console.error(err); setSignInMsg(errorText(err)); }
     finally { setBusy(''); }
@@ -111,22 +122,24 @@ export default function KeepAccount({ hasReports = false, onMerged }) {
         <>
           <p>{A.explain}</p>
           {asked && <p><strong>{A.pending(asked)}</strong></p>}
-          <form className="panel" onSubmit={addEmail}>
-            <label>{A.address}
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+          <form className="panel" onSubmit={addEmail} noValidate>
+            <label><span>{A.address}</span>
+              <input ref={addRef} type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" aria-invalid={addText ? 'true' : undefined} aria-describedby={addText ? 'err-add-email' : undefined} />
+              {addText && <span id="err-add-email" className="fielderr">{addText}</span>}
             </label>
             <p className="hint">{A.privacy}</p>
-            <button type="submit" disabled={busy === 'add' || !email.trim()}>{A.send}</button>
+            <button type="submit" disabled={busy === 'add'}>{A.send}</button>
           </form>
           <details>
             <summary>{A.haveOne}</summary>
-            <form className="panel" onSubmit={signIn}>
+            <form className="panel" onSubmit={signIn} noValidate>
               <p>{A.signInIntro}</p>
               {hasReports && <p className="warn">{A.switchWarning}</p>}
-              <label>{A.address}
-                <input type="email" value={signInEmail} onChange={(e) => setSignInEmail(e.target.value)} required autoComplete="email" />
+              <label><span>{A.address}</span>
+                <input ref={inRef} type="email" value={signInEmail} onChange={(e) => setSignInEmail(e.target.value)} autoComplete="email" aria-invalid={inText ? 'true' : undefined} aria-describedby={inText ? 'err-signin-email' : undefined} />
+                {inText && <span id="err-signin-email" className="fielderr">{inText}</span>}
               </label>
-              <button type="submit" className="secondary" disabled={busy === 'signin' || !signInEmail.trim()}>{A.signInSend}</button>
+              <button type="submit" className="secondary" disabled={busy === 'signin'}>{A.signInSend}</button>
             </form>
             {signInMsg && <p aria-live="polite"><strong>{signInMsg}</strong></p>}
           </details>

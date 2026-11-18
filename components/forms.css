@@ -5,3 +5,23 @@
 [aria-invalid='true'] { border-color: var(--danger) !important; box-shadow: 0 0 0 1px var(--danger); }
 [data-invalid='true'] { border-radius: 14px; box-shadow: 0 0 0 2px var(--danger); padding: .6rem; }
 .field[data-invalid]:focus { outline: none; }
+
+/* ---- Tidy-ups found while adding the required-field markers ---- */
+/* The "Problems they handle" list sits flat like every other field, instead of a box with the label cut across its top line. */
+fieldset.panel { border: 0; background: none; box-shadow: none; padding: 0; margin: 0; min-width: 0; animation: none; }
+fieldset.panel legend { padding: 0; margin: 0 0 .2rem; font-weight: 700; }
+/* When nothing is ticked after pressing Send, the group gets a red outline drawn OUTSIDE it, so its text stays lined up with the other fields. */
+fieldset.panel[data-invalid='true'], fieldset.panel[data-invalid='true']:focus { padding: 0; box-shadow: none; outline: 2px solid var(--danger); outline-offset: 8px; border-radius: 14px; margin-bottom: .6rem; }
+/* The date box now looks like the other fields (it was the browser's plain default). */
+input[type=date] {
+  font: inherit; width: 100%; padding: .7rem .9rem; min-height: 50px; box-sizing: border-box;
+  background: var(--paper); color: var(--ink); border: 2px solid var(--field); border-radius: 12px;
+  transition: border-color .2s, box-shadow .2s;
+}
+/* A checkbox that needs ticking gets the same red outline as the other fields. */
+.check input[aria-invalid='true'] { outline: 2px solid var(--danger); outline-offset: 2px; box-shadow: none; }
+
+/* Fields in a form that is not wrapped in a panel (the moderator's reply form) get the same even spacing as the others. */
+.stack { display: grid; gap: .9rem; }
+.stack > p { margin: 0; }
+.stack > p > button { width: 100%; }

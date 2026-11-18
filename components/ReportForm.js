@@ -19,10 +19,8 @@ import { strings as s } from '@/lib/strings';
 import EmergencyNotice from '@/components/EmergencyNotice';
 import { needsEmergencyNotice } from '@/lib/emergency';
 import { missingFor } from '@/lib/reportRules';
+import { Req } from '@/components/Req';
 import '@/components/forms.css';
-
-// A red star after the name of a required field. Screen readers already hear aria-required, so the star is hidden from them.
-const Req = () => <span className="req" aria-hidden="true"> *</span>;
 
 const LocationPicker = dynamic(() => import('./LocationPicker'), {
   ssr: false,

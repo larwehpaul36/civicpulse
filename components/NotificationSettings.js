@@ -1,9 +1,11 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   EMAIL_NOTICES, clearContact, disablePush, enablePush, getContact, pushState, relinkPush, saveContact,
 } from '@/lib/notifications';
 import { strings as s } from '@/lib/strings';
+import { emailProblem } from '@/lib/formRules';
+import '@/components/forms.css';
 import InstallGuide from '@/components/InstallGuide';
 
 function PushSettings() {
@@ -47,6 +49,12 @@ function EmailSettings() {
   const [contact, setContact] = useState(undefined); // undefined = loading, null = none
   const [email, setEmail] = useState('');
   const [agree, setAgree] = useState(false);
+  const [tried, setTried] = useState(false); // pressed the button with something missing
+  const emailRef = useRef(null);
+  const agreeRef = useRef(null);
+  const problem = tried ? emailProblem(email) : null;
+  const emailText = problem === 'empty' ? s.req.email : problem === 'bad' ? s.req.emailBad : null;
+  const agreeText = tried && !agree ? s.req.consent : null;
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
@@ -54,12 +62,17 @@ function EmailSettings() {
 
   async function save(e) {
     e.preventDefault();
+    if (emailProblem(email) || !agree) {
+      setTried(true); setMsg('');
+      (emailProblem(email) ? emailRef : agreeRef).current?.focus();
+      return;
+    }
     setBusy(true); setMsg('');
     try {
       await saveContact(email.trim());
       setContact({ email: email.trim().toLowerCase(), verified: false });
       setMsg(s.email.sentTo(email.trim().toLowerCase()));
-      setEmail(''); setAgree(false);
+      setEmail(''); setAgree(false); setTried(false);
     } catch (err) {
       setMsg(/bad_email/.test(err?.message) ? s.email.bad : /too_soon/.test(err?.message) ? s.email.tooSoon : s.email.failed);
     } finally { setBusy(false); }
@@ -82,15 +95,17 @@ function EmailSettings() {
           <button type="button" className="secondary" disabled={busy} onClick={remove}>{s.email.remove}</button>
         </>
       )}
-      <form className="panel" onSubmit={save}>
-        <label>{s.email.address}
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+      <form className="panel" onSubmit={save} noValidate>
+        <label><span>{s.email.address}</span>
+          <input ref={emailRef} type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" aria-invalid={emailText ? 'true' : undefined} aria-describedby={emailText ? 'err-notify-email' : undefined} />
+          {emailText && <span id="err-notify-email" className="fielderr">{emailText}</span>}
         </label>
         <label className="check">
-          <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> {s.email.consent}
+          <input ref={agreeRef} type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} aria-invalid={agreeText ? 'true' : undefined} aria-describedby={agreeText ? 'err-notify-agree' : undefined} /> {s.email.consent}
         </label>
+        {agreeText && <span id="err-notify-agree" className="fielderr">{agreeText}</span>}
         <p className="hint">{s.email.privacy}</p>
-        <button type="submit" disabled={busy || !agree || !email.trim()}>{s.email.save}</button>
+        <button type="submit" disabled={busy}>{s.email.save}</button>
       </form>
       {msg && <p aria-live="polite"><strong>{msg}</strong></p>}
     </section>

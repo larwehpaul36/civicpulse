@@ -1,9 +1,12 @@
 'use client';
 import { placeLabel } from '@/lib/places';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { suggestChange } from '@/lib/directoryApi';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
+import { directoryMissing } from '@/lib/formRules';
+import { Req } from '@/components/Req';
+import '@/components/forms.css';
 
 const D = s.directory;
 const errorText = (err) => {
@@ -20,6 +23,9 @@ export default function DirectoryForm({ party = null, regions, categories, onSen
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [sent, setSent] = useState(false);
+  const [tried, setTried] = useState(false); // pressed Send with something missing
+  const [attempt, setAttempt] = useState(0);
+  const formRef = useRef(null);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
 
   const areas = useMemo(() => {
@@ -34,8 +40,19 @@ export default function DirectoryForm({ party = null, regions, categories, onSen
   const showContacts = showName;
   const showCoverage = mode === 'new_party' || mode === 'coverage';
 
+  // What is still empty. Messages show only after Send was pressed, and vanish by themselves once fixed.
+  const miss = directoryMissing(mode, f, picked.length);
+  const bad = (k) => tried && miss.includes(k);
+  const invalid = (k) => (bad(k) ? 'true' : undefined);
+  const why = (k) => (bad(k) ? `err-${k}` : undefined);
+  const fix = (k) => bad(k) && <span id={`err-${k}`} className="fielderr">{s.req.dir[k]}</span>;
+  useEffect(() => {
+    if (attempt) formRef.current?.querySelector('[aria-invalid="true"],[data-invalid="true"]')?.focus();
+  }, [attempt]);
+
   async function send(e) {
     e.preventDefault();
+    if (miss.length) { setTried(true); setAttempt((n) => n + 1); setMsg(''); return; }
     setBusy(true); setMsg('');
     try {
       await suggestChange({
@@ -61,44 +78,49 @@ export default function DirectoryForm({ party = null, regions, categories, onSen
   if (sent) return <p aria-live="polite"><strong>{D.thanks}</strong></p>;
 
   return (
-    <form className="panel" onSubmit={send}>
+    <form ref={formRef} className="panel" onSubmit={send} noValidate>
       {party && (
         <label>{D.kindMode}
-          <select value={mode} onChange={(e) => { setMode(e.target.value); setMsg(''); }}>
+          <select value={mode} onChange={(e) => { setMode(e.target.value); setMsg(''); setTried(false); }}>
             {Object.entries(D.kinds).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </label>
       )}
       {mode === 'correction' && <p className="hint">{D.onlyChange}</p>}
+      {mode !== 'correction' && <p className="hint reqnote"><span className="req" aria-hidden="true">*</span> {s.req.note}</p>}
 
       {showName && (
-        <label>{D.name}
-          <input type="text" value={f.name} onChange={set('name')} placeholder={party?.name ?? ''} required={mode === 'new_party'} maxLength={120} />
+        <label><span>{D.name}{mode === 'new_party' && <Req />}</span>
+          <input type="text" value={f.name} onChange={set('name')} placeholder={party?.name ?? ''} maxLength={120} aria-required={mode === 'new_party' || undefined} aria-invalid={invalid('name')} aria-describedby={why('name')} />
+          {fix('name')}
         </label>
       )}
       {mode === 'new_party' && (
-        <label>{D.type}
-          <select value={f.type} onChange={set('type')} required>
+        <label><span>{D.type}<Req /></span>
+          <select value={f.type} onChange={set('type')} aria-required="true" aria-invalid={invalid('type')} aria-describedby={why('type')}>
             <option value="">{D.pickArea.replace('area', 'type')}</option>
             {Object.entries(s.admin.typeOptions).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
+          {fix('type')}
         </label>
       )}
       {showCoverage && (
         <>
-          <label>{D.area}
-            <select value={f.regionId} onChange={set('regionId')} required>
+          <label><span>{D.area}<Req /></span>
+            <select value={f.regionId} onChange={set('regionId')} aria-required="true" aria-invalid={invalid('area')} aria-describedby={why('area')}>
               <option value="">{D.pickArea}</option>
               {areas.map((a) => <option key={a.id} value={a.id}>{a.text}</option>)}
             </select>
+            {fix('area')}
           </label>
-          <fieldset className="panel">
-            <legend>{D.problems}</legend>
+          <fieldset className="panel" tabIndex={-1} data-invalid={invalid('problems')} aria-describedby={why('problems')}>
+            <legend>{D.problems}<Req /></legend>
             {categories.map((c) => (
               <label key={c.id} className="check">
                 <input type="checkbox" checked={picked.includes(c.id)} onChange={() => togglePicked(c.id)} /> {label(c.name)}
               </label>
             ))}
+            {fix('problems')}
           </fieldset>
         </>
       )}
@@ -110,8 +132,9 @@ export default function DirectoryForm({ party = null, regions, categories, onSen
           <p className="hint">{D.whatsappHint}</p>
         </>
       )}
-      <label>{mode === 'wrong' ? D.noteWrong : D.note}
-        <textarea value={f.note} onChange={set('note')} rows={3} maxLength={500} required={mode === 'wrong'} />
+      <label><span>{mode === 'wrong' ? D.noteWrong : D.note}{mode === 'wrong' && <Req />}</span>
+        <textarea value={f.note} onChange={set('note')} rows={3} maxLength={500} aria-required={mode === 'wrong' || undefined} aria-invalid={invalid('note')} aria-describedby={why('note')} />
+        {fix('note')}
       </label>
       <button type="submit" disabled={busy}>{D.send}</button>
       {msg && <p aria-live="polite"><strong>{msg}</strong></p>}
