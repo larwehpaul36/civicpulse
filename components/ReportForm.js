@@ -18,6 +18,11 @@ import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import EmergencyNotice from '@/components/EmergencyNotice';
 import { needsEmergencyNotice } from '@/lib/emergency';
+import { missingFor } from '@/lib/reportRules';
+import '@/components/forms.css';
+
+// A red star after the name of a required field. Screen readers already hear aria-required, so the star is hidden from them.
+const Req = () => <span className="req" aria-hidden="true"> *</span>;
 
 const LocationPicker = dynamic(() => import('./LocationPicker'), {
   ssr: false,
@@ -50,6 +55,8 @@ export default function ReportForm() {
   const formRef = useRef(null);
   const moved = useRef(false);
   const [error, setError] = useState('');
+  const [tried, setTried] = useState({ 0: false, 1: false }); // pressed Next on that step with something missing
+  const [attempt, setAttempt] = useState(0);
   const ask = useVerify();
   const [detail, setDetail] = useState('');
   const [dupes, setDupes] = useState([]);
@@ -80,6 +87,23 @@ export default function ReportForm() {
   // "Other problem": the person names it in a few words, and a moderator finds the right office.
   const otherId = categories.find((c) => c.slug === 'other')?.id;
   const isOther = !!otherId && f.categoryId === otherId;
+
+  // What is still empty. Messages show only after Next was pressed on that step, and disappear by themselves once fixed.
+  const vals = { categoryId: f.categoryId, photo, loc, regionId: f.regionId, isOther, otherLabel: f.otherLabel };
+  const bad = (key, st) => tried[st] && missingFor(st, vals).includes(key);
+  const invalid = (key, st) => (bad(key, st) ? 'true' : undefined);
+  const why = (key, st) => (bad(key, st) ? `err-${key}` : undefined);
+  const fix = (key, st) => bad(key, st) && <span id={`err-${key}`} className="fielderr">{s.req[key]}</span>;
+
+  // After a failed Next, put the cursor on the first field that needs attention.
+  useEffect(() => {
+    if (!attempt) return;
+    formRef.current?.querySelector('[aria-invalid="true"],[data-invalid="true"]')?.focus();
+  }, [attempt]);
+  // Drop the summary message as soon as everything on the step is filled in.
+  useEffect(() => {
+    if (error && tried[step] && missingFor(step, vals).length === 0) setError('');
+  }, [f, photo, loc, step]);
 
   // Every report is saved on the phone first, then sent. A weak signal can no longer lose it.
   async function submit(skipDuplicateCheck = false) {
@@ -143,7 +167,7 @@ export default function ReportForm() {
 
   function reset() {
     setF(EMPTY); setPhoto(null); setLoc(null); setDupes([]); setConfirmedIds([]); setSavedId(null); setStatus('idle'); setStep(0);
-    setError(''); setDetail('');
+    setError(''); setDetail(''); setTried({ 0: false, 1: false });
   }
 
   // Keep the card in view when the step changes (but not on first load).
@@ -154,9 +178,12 @@ export default function ReportForm() {
 
   function next() {
     setError(''); setDetail('');
-    if (step === 0 && (!f.categoryId || !photo)) return setError(s.flow.miss0);
-    if (step === 0 && isOther && !f.otherLabel.trim()) return setError(s.other.missing);
-    if (step === 1 && (!f.regionId || !loc)) return setError(s.flow.miss1);
+    const miss = missingFor(step, vals);
+    if (miss.length) {
+      setTried((v) => ({ ...v, [step]: true }));
+      setAttempt((n) => n + 1);
+      return setError(step === 0 ? (miss.includes('category') || miss.includes('photo') ? s.flow.miss0 : s.other.missing) : s.flow.miss1);
+    }
     setStep((n) => Math.min(2, n + 1));
   }
   function back() { setError(''); setDetail(''); setStep((n) => Math.max(0, n - 1)); }
@@ -215,20 +242,23 @@ export default function ReportForm() {
     <form ref={formRef} className="panel" onSubmit={(e) => { e.preventDefault(); if (step < 2) next(); else submit(false); }}>
       <ol className="stepper" aria-hidden="true">{[0, 1, 2].map((n) => <li key={n} className={n <= step ? 'on' : ''} />)}</ol>
       <p className="stepcount" aria-live="polite">{s.flow.of(step + 1)} · {s.flow.names[step]}</p>
+      <p className="hint reqnote" hidden={step === 2}><span className="req" aria-hidden="true">*</span> {s.req.note}</p>
 
       <div className="stepbody" hidden={step !== 0}>
-        <label>{s.category}
-          <select value={f.categoryId} onChange={set('categoryId')} aria-required="true">
+        <label><span>{s.category}<Req /></span>
+          <select value={f.categoryId} onChange={set('categoryId')} aria-required="true" aria-invalid={invalid('category', 0)} aria-describedby={why('category', 0)}>
             <option value="">{s.choose}</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>{label(c.category_groups?.name)}: {label(c.name)}</option>
             ))}
           </select>
+          {fix('category', 0)}
         </label>
         {isOther && (
-          <label>{s.other.label}
-            <input type="text" value={f.otherLabel} onChange={set('otherLabel')} maxLength={80} aria-required="true" />
+          <label><span>{s.other.label}<Req /></span>
+            <input type="text" value={f.otherLabel} onChange={set('otherLabel')} maxLength={80} aria-required="true" aria-invalid={invalid('other', 0)} aria-describedby={why('other', 0)} />
             <span className="hint">{s.other.hint}</span>
+            {fix('other', 0)}
           </label>
         )}
         <label>{s.severity}
@@ -237,20 +267,22 @@ export default function ReportForm() {
           </select>
         </label>
         {needsEmergencyNotice(f.severity) && <EmergencyNotice />}
-        <label>{s.photo}
-          <input type="file" accept="image/*" capture="environment" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} aria-required="true" />
+        <label><span>{s.photo}<Req /></span>
+          <input type="file" accept="image/*" capture="environment" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} aria-required="true" aria-invalid={invalid('photo', 0)} aria-describedby={why('photo', 0)} />
           <span className="hint">{s.photoHelp}</span>
+          {fix('photo', 0)}
         </label>
         {preview && <img className="preview" src={preview} alt={s.a11y.yourPhoto} />}
         <PhotoBlur file={photo} onApply={setPhoto} />
       </div>
 
       <div className="stepbody" hidden={step !== 1}>
-        <label>{s.region}
-          <select value={regionPickId} onChange={set('regionId')} aria-required="true">
+        <label><span>{s.region}<Req /></span>
+          <select value={regionPickId} onChange={set('regionId')} aria-required="true" aria-invalid={invalid('region', 1)} aria-describedby={why('region', 1)}>
             <option value="">{s.choose}</option>
             {topRegions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
+          {fix('region', 1)}
         </label>
         {districts.length > 0 && (
           <label>{s.district}
@@ -260,8 +292,9 @@ export default function ReportForm() {
             </select>
           </label>
         )}
-        <div className="field">
-          <span className="label">{s.location}</span>
+        <div className="field" role="group" aria-labelledby="lbl-spot" aria-describedby={why('spot', 1)} tabIndex={-1} data-invalid={invalid('spot', 1)}>
+          <span className="label" id="lbl-spot">{s.location}<Req /></span>
+          {fix('spot', 1)}
           {step === 1 && <LocationPicker value={loc} onChange={setLoc} />}
         </div>
       </div>

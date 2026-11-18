@@ -1,0 +1,7 @@
+/* Required fields: a red star, a one-line note, and a message under any field that was left empty. */
+.req { color: var(--danger); font-weight: 800; }
+.reqnote { margin: 0 0 .9rem; }
+.fielderr { display: block; color: var(--danger); font-weight: 700; font-size: .95rem; margin: .1rem 0 0; }
+[aria-invalid='true'] { border-color: var(--danger) !important; box-shadow: 0 0 0 1px var(--danger); }
+[data-invalid='true'] { border-radius: 14px; box-shadow: 0 0 0 2px var(--danger); padding: .6rem; }
+.field[data-invalid]:focus { outline: none; }
