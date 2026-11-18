@@ -29,3 +29,11 @@ Answers the "accessibility evidence" point of the first-time-user assessment.
 - Language pill shows a short code (EN, TW, HA, EE, GA) on phones narrower than 344px so the bar fits (`lib/languageLabel.js`).
 - Lesson: render every layout change (Playwright + the real CSS, 320/360/390px, English and Hausa, light and dark) before delivering it. A rule with a higher specificity re-showed hidden tabs once.
 - Not yet checked on a real Android phone. Send screenshots when testing.
+
+## Required fields on the report form (18 Nov 2026)
+A first-time user said the photo field should be marked required: people only learned it was needed when they pressed Next.
+- Every required field has a red star, and a note under the step count says "* means you must fill it in."
+- Pressing Next with something missing shows a message under each missing field ("Required: add a photo of the problem. ..."), outlines it in red, and moves the cursor to the first one. The messages disappear as the field is filled.
+- The rules live in `lib/reportRules.js` (tested). Required: problem type, photo, "Other" wording (only for Other), region, spot on the map. Optional: seriousness, district, details.
+- Screen readers already had `aria-required`; they now also hear the message through `aria-describedby` and `aria-invalid`.
+- New English strings are in `strings.req`; Twi and Hausa show English for them until reviewed (they will appear in the next review CSV export).

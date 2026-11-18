@@ -14,6 +14,8 @@ test('step 1 explains what is missing and does not move on', async ({ page }) =>
   await page.goto('/');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.locator('.error')).toContainText('Choose the problem');
+  await expect(page.locator('.fielderr').first()).toContainText('Required');
+  await expect(page.getByText('means you must fill it in.')).toBeVisible();
   await expect(page.getByText('Step 1 of 3')).toBeVisible();
 });
 
