@@ -18,7 +18,7 @@ import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import EmergencyNotice from '@/components/EmergencyNotice';
 import { needsEmergencyNotice } from '@/lib/emergency';
-import { missingFor } from '@/lib/reportRules';
+import { missingFor, DUPLICATE_RADIUS_M, duplicateText } from '@/lib/reportRules';
 import { Req } from '@/components/Req';
 import '@/components/forms.css';
 
@@ -34,7 +34,7 @@ async function findDuplicates(loc, categoryId) {
   const check = (async () => {
     await ensureUser();
     const { data, error } = await supabase.rpc('find_nearby_duplicates', {
-      lat: loc.lat, lng: loc.lng, cat: categoryId, radius_m: 50,
+      lat: loc.lat, lng: loc.lng, cat: categoryId, radius_m: DUPLICATE_RADIUS_M,
     });
     return error ? null : data;
   })();
@@ -217,8 +217,9 @@ export default function ReportForm() {
         <ul className="dupes">
           {dupes.map((d) => (
             <li key={d.id}>
-              <p>{d.description || '—'}</p>
+              <p>{duplicateText(d, s.dupNoText)}</p>
               <p className="hint">{s.daysOpen(d.days_open)} · {s.confirmations(d.confirmation_count)}</p>
+              <p><Link href={`/issues/${d.id}`} target="_blank" rel="noopener">{s.viewReport}</Link></p>
               {confirmedIds.includes(d.id)
                 ? <p><strong>{s.confirmed}</strong></p>
                 : <button type="button" onClick={() => confirm(d.id)}>{s.confirmIt}</button>}
