@@ -253,6 +253,7 @@ body { min-height:100dvh; }
 .pcard { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:1.1rem; box-shadow:var(--shadow); display:grid; gap:.8rem; animation:rise .6s var(--ease) both; }
 .pcard header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.5rem; } .pcard h3 { margin:0; font-size:1.15rem; }
 .pmetrics { display:grid; grid-template-columns:repeat(4,1fr); gap:.8rem; }
+.replyrow { display:grid; gap:.5rem; border-top:1px solid var(--line); padding-top:.8rem; } .replyrow h4 { margin:0; font-size:.9rem; color:var(--muted); font-weight:800; }
 .m b { display:block; font-size:1.45rem; font-weight:900; letter-spacing:-.02em; font-variant-numeric:tabular-nums; } .m span { font-size:.82rem; color:var(--muted); }
 .rate { height:8px; border-radius:99px; background:var(--line); overflow:hidden; } .rate i { display:block; height:100%; background:var(--green); border-radius:99px; transform-origin:left; animation:grow .9s var(--ease) both; }
 .sparkrow { display:flex; align-items:center; gap:.7rem; } .sparkrow .hint { margin:0; }

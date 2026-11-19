@@ -54,3 +54,12 @@ test('every page of a large table is read, not just the first 1000', async () =>
 test('a failing page stops the export instead of producing a short file', async () => {
   await assert.rejects(fetchAll(async (a) => (a === 0 ? { data: Array(1000).fill(1), error: null } : { data: null, error: new Error('boom') })), /boom/);
 });
+
+test('office rows carry reply columns, and leave them blank before migration 021', () => {
+  const withReply = officeRows({ issues: ISSUES, parties: LOOKUPS.parties, fix: LOOKUPS.fix, replies: [{ id: 'r1', issue_id: 'i1', created_at: '2026-10-05T10:00:00Z' }] }, Date.UTC(2026, 10, 7))[0];
+  assert.deepEqual([withReply.replied, withReply.median_days_to_first_reply, withReply.waiting_for_reply], [1, 3, 0]);
+  const before = officeRows({ issues: ISSUES, parties: LOOKUPS.parties, fix: LOOKUPS.fix }, Date.UTC(2026, 10, 7))[0];
+  assert.equal(csvCell(before.replied), '');
+  assert.equal(csvCell(before.median_days_to_first_reply), '');
+  assert.ok(!JSON.stringify(withReply).includes('relayed'), 'who relayed a reply is never exported');
+});

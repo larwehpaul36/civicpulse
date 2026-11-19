@@ -323,3 +323,6 @@ Depends on the Nav fix being merged first (layout.js is edited; Nav.js is not).
 - Report form (PR: feature/required-fields) and the other forms (feature/required-fields-forms). See docs/accessibility.md. Trigger: a first-time user said the photo field should be marked required.
 - Not changed: PhoneVerify (single field, has its own error); admin sign-in and admin "new party" forms still use native `required` (moderators only).
 - New English strings are in strings.req; Twi/Hausa fall back to English until the next review CSV export.
+
+### 19 Nov 2026: office response record
+Branch feature/response-record. See docs/response-record.md. (The duplicate-check tweaks are a separate change, docs/duplicate-check.md, which needs the required-fields work merged first.) Built after a comparison with FixMyStreet and SeeClickFix: the public record of how fast offices reply. Not yet phone-tested; Twi/Hausa fall back to English for the new strings.
