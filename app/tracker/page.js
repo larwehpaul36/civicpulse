@@ -6,7 +6,7 @@ import { fetchAll } from '@/lib/fetchAll';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import PromiseStats from '@/components/PromiseStats';
-import { summarize, partyStats, sortParties, weeklyTrend } from '@/lib/trackerStats';
+import { summarize, partyStats, sortParties, weeklyTrend, firstReplies } from '@/lib/trackerStats';
 
 const T = s.tracker2;
 const fmtDate = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -58,6 +58,17 @@ function PartyCard({ p, name }) {
         <div className="m"><b>{p.oldestOpen === null ? '—' : T.days(p.oldestOpen)}</b><span>{T.oldest}</span></div>
       </div>
       {p.reopened > 0 && <p className="warn">{T.reopened(p.reopened)}</p>}
+      {p.replied !== null && (
+        <div className="replyrow">
+          <h4>{T.replyTitle}</h4>
+          <div className="pmetrics">
+            <div className="m"><b>{p.replied}/{p.sent}</b><span>{T.replied}</span></div>
+            <div className="m"><b>{p.medianReply === null ? '—' : T.days(p.medianReply)}</b><span>{p.medianReply === null ? T.noReply : T.medianReply}</span></div>
+            <div className="m"><b>{p.waiting}</b><span>{T.waiting}</span></div>
+            <div className="m"><b>{p.oldestWaiting === null ? '—' : T.days(p.oldestWaiting)}</b><span>{T.longestWait}</span></div>
+          </div>
+        </div>
+      )}
       <div className="rate" aria-hidden="true"><i style={{ width: `${p.rate}%` }} /></div>
       <div className="sparkrow"><Spark data={p.spark} /><span className="hint">{T.fixesPerWeek}</span></div>
     </article>
@@ -74,21 +85,23 @@ export default function TrackerPage() {
     (async () => {
       // fetchAll reads every page: Supabase returns at most 1000 rows per request, so a plain limit(5000) would silently cut the tracker short
       try {
-        const [issues, parties, cats, fix] = await Promise.all([
+        const [issues, parties, cats, fix, replies] = await Promise.all([
           fetchAll((a, b) => supabase.from('public_issues').select('id, status, party_id, category_id, created_at, sent_at, resolved_at').order('id').range(a, b)),
           fetchAll((a, b) => supabase.from('responsible_parties').select('id, name').order('id').range(a, b)),
           fetchAll((a, b) => supabase.from('categories').select('id, name').order('id').range(a, b)),
           fetchAll((a, b) => supabase.from('public_fix_checks').select('issue_id, reopen_count').gt('reopen_count', 0).order('issue_id').range(a, b)).catch(() => []), // empty if 019 has not been run
+          fetchAll((a, b) => supabase.from('office_replies').select('id, issue_id, created_at').order('id').range(a, b)).catch(() => null), // null if 021 has not been run: the reply numbers are then left out, not shown as zero
         ]);
         const reopen = new Map(fix.map((x) => [x.issue_id, x.reopen_count]));
-        setData({ rows: issues.map((r) => ({ ...r, reopen_count: reopen.get(r.id) ?? 0 })), names: Object.fromEntries(parties.map((x) => [x.id, x.name])), cats });
-      } catch (err) { console.error(err); setData({ rows: [], names: {}, cats: [] }); }
+        setData({ first: replies ? firstReplies(replies) : null, rows: issues.map((r) => ({ ...r, reopen_count: reopen.get(r.id) ?? 0 })), names: Object.fromEntries(parties.map((x) => [x.id, x.name])), cats });
+      } catch (err) { console.error(err); setData({ first: null, rows: [], names: {}, cats: [] }); }
     })();
   }, []);
 
   const rows = useMemo(() => (data ? data.rows.filter((r) => cat === 'all' || r.category_id === cat) : []), [data, cat]);
   const kpi = useMemo(() => summarize(rows), [rows]);
-  const parties = useMemo(() => sortParties(partyStats(rows, now), sort), [rows, sort, now]);
+  const first = data ? data.first : null;
+  const parties = useMemo(() => sortParties(partyStats(rows, now, first), sort), [rows, sort, now, first]);
   const trend = useMemo(() => weeklyTrend(rows, now, 12), [rows, now]);
   const usedCats = data ? data.cats.filter((c) => data.rows.some((r) => r.category_id === c.id)) : [];
   const tiles = [kpi.filed, kpi.sent, kpi.resolved, kpi.median === null ? '—' : T.days(kpi.median)];
@@ -124,7 +137,7 @@ export default function TrackerPage() {
           {parties.length === 0 ? <p>{s.trackerEmpty}</p> : (
             <>
               <div className="tabs" role="group" aria-label="Sort">
-                {Object.entries(T.sorts).map(([k, v]) => (
+                {Object.entries(T.sorts).filter(([k]) => k !== 'reply' || first).map(([k, v]) => (
                   <button key={k} type="button" className={`tab${sort === k ? ' on' : ''}`} aria-pressed={sort === k} onClick={() => setSort(k)}>{v}</button>
                 ))}
               </div>
