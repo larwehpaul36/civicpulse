@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { categoryTitle } from '@/lib/categoryTitle';
 import { officesNear } from '@/lib/places';
 import { supabase } from '@/lib/supabase';
+import { linkUrl, makeReplyLink, revokeReplyLinks } from '@/lib/replyLinks';
 import { compressImage } from '@/lib/compressImage';
 import { linksOf, otherEnd, parseIssueId, suggestions } from '@/lib/relatedIssues';
 import { strings as s } from '@/lib/strings';
@@ -40,6 +41,7 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
   const [channel, setChannel] = useState('other');
   const [relation, setRelation] = useState('duplicate');
   const [manualId, setManualId] = useState('');
+  const [replyUrl, setReplyUrl] = useState(''); // the office's private reply link, once the moderator has made one
 
   async function run(fn, ok = A.done) {
     setBusy(true); setMsg('');
@@ -57,6 +59,7 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
     confirmations: i.confirmation_count,
     mapUrl: mapUrl(i.lat, i.lng),
     reportUrl: `${window.location.origin}/issues/${i.id}`,
+    replyUrl,
   });
 
   const issueById = Object.fromEntries(allIssues.map((x) => [x.id, x]));
@@ -85,6 +88,22 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
   }
   async function copy() {
     try { await navigator.clipboard.writeText(message()); setMsg(A.copied); } catch { setMsg(s.failed); }
+  }
+
+  // Made on its own button (not inside "WhatsApp"), because a browser blocks a window that opens after a wait.
+  async function addReplyLink() {
+    setBusy(true); setMsg('');
+    const r = await makeReplyLink(supabase, i.id);
+    if (r.token) { setReplyUrl(linkUrl(window.location.origin, r.token)); setMsg(A.replyLink.added); }
+    else setMsg(A.replyLink.errors[r.error] ?? A.replyLink.errors.failed);
+    setBusy(false);
+  }
+  async function switchOffLinks() {
+    setBusy(true); setMsg('');
+    const r = await revokeReplyLinks(supabase, i.id);
+    if (r.error) setMsg(A.replyLink.errors[r.error] ?? A.replyLink.errors.failed);
+    else { setReplyUrl(''); setMsg(A.replyLink.revoked(r.count)); }
+    setBusy(false);
   }
 
   const markSent = () => run(async () => {
@@ -206,6 +225,11 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
           {i.party_id && (
             <>
               <h3>{A.escalate}</h3>
+              <p className="hint">{replyUrl ? A.replyLink.added : A.replyLink.help}</p>
+              <div className="row">
+                <button type="button" className="secondary" disabled={busy || !!replyUrl} onClick={addReplyLink}>{A.replyLink.add}</button>
+                <button type="button" className="secondary" disabled={busy} onClick={switchOffLinks}>{A.replyLink.revoke}</button>
+              </div>
               <div className="row">
                 {waNumber && <button type="button" className="secondary" onClick={openWhatsApp}>{A.whatsapp}</button>}
                 {i.party_email && <button type="button" className="secondary" onClick={openEmail}>{A.emailParty}</button>}
