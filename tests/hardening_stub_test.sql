@@ -1,4 +1,4 @@
--- Self-checking test for migrations 011, 011b, 014, 015, 016, 017, 018, 019 and 020 on a throwaway Postgres (no PostGIS needed).
+-- Self-checking test for migrations 011, 011b, 014, 015, 016, 017, 018, 019, 020 and 024 on a throwaway Postgres (no PostGIS needed).
 -- Run from the project root:
 --   createdb civic_hard && psql -v ON_ERROR_STOP=1 -q -d civic_hard -f tests/hardening_stub_test.sql
 -- It builds small stand-ins for the tables and policies those migrations touch (copied from 001 and 003) and
@@ -12,7 +12,7 @@
 create role anon nologin; create role authenticated nologin; create role service_role nologin;
 create schema auth;
 create table auth.users (id uuid primary key, created_at timestamptz default now(), phone_confirmed_at timestamptz,
-                         is_anonymous boolean not null default false, email_confirmed_at timestamptz);
+                         is_anonymous boolean not null default false, email_confirmed_at timestamptz, phone text unique);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 grant usage on schema public, auth to anon, authenticated;
 alter default privileges in schema public grant all on tables to anon, authenticated;
@@ -444,6 +444,66 @@ select t('020 a moderator sees reopened reports with this round''s totals', exis
 select t('020 reports nobody has answered, and never reopened, are left out', not exists (select 1 from admin_fix_check_summary() where issue_id = iid(1)));
 select t('020 the summary carries no user ids', (select count(*) from pg_proc p, unnest(coalesce(p.proargnames, '{}')) a where p.proname = 'admin_fix_check_summary' and a like '%user%') = 0);
 reset role;
+
+----------------------------------------------------------------------------------------------------------------
+-- 024: the merge carries a verified phone number, and works from/into phone-only accounts
+\i 024_merge_carries_phone.sql
+select t('024 same permissions as 017: closed to the public, open to signed-in visitors',
+  not has_function_privilege('anon', 'create_merge_ticket()', 'execute') and not has_function_privilege('anon', 'claim_merge_ticket(text)', 'execute')
+  and has_function_privilege('authenticated', 'create_merge_ticket()', 'execute') and has_function_privilege('authenticated', 'claim_merge_ticket(text)', 'execute'));
+-- 200 plain anonymous | 201 verified a phone and is no longer flagged anonymous | 202 email account | 203 phone-only account
+-- 204 email account with its own phone | 205 nothing confirmed | 206 verified phone, not anonymous | 207 anonymous
+select mkuser(200, '3 days'), mkuser(201, '3 days'), mkuser(202, '30 days'), mkuser(203, '30 days'), mkuser(204, '30 days'), mkuser(205, '30 days'), mkuser(206, '3 days'), mkuser(207, '3 days');
+update auth.users set is_anonymous = true where id in (uid(200), uid(207));
+update auth.users set phone = '+233200000001', phone_confirmed_at = now() where id = uid(201);
+update auth.users set email_confirmed_at = now() where id in (uid(202), uid(204));
+update auth.users set phone = '+233200000002', phone_confirmed_at = now() where id = uid(203);
+update auth.users set phone = '+233200000003', phone_confirmed_at = now() where id = uid(204);
+update auth.users set phone = '+233200000004', phone_confirmed_at = now() where id = uid(206);
+select mkissue(200, 200), mkissue(201, 201), mkissue(206, 206), mkissue(207, 207);
+
+set role authenticated;
+select t('024 a plain anonymous phone still gets a ticket', works('select ticket_for(200, ''t200'')'));
+select t('024 an account with a confirmed email still cannot ask for a ticket', fails('select ticket_for(202, ''x'')'));
+select t('024 a phone that verified a number (no longer flagged anonymous) CAN get a ticket', works('select ticket_for(201, ''t201'')'));
+select as_user(205);
+select t('024 an account with nothing confirmed still cannot claim', fails('select claim_as(205, ''t201'')'));
+reset role;
+select t('024 ...and nothing moved', (select reporter_id from issues where id = iid(201)) = uid(201) and (select phone from auth.users where id = uid(201)) = '+233200000001');
+
+set role authenticated;
+select t('024 the email account claims the phone-verified phone: its report moves', claim_as(202, 't201') = 1);
+reset role;
+select t('024 the verified number moved to the email account, still confirmed', (select phone from auth.users where id = uid(202)) = '+233200000001' and (select phone_confirmed_at from auth.users where id = uid(202)) is not null);
+select t('024 the old account no longer holds the number', (select phone from auth.users where id = uid(201)) is null and (select phone_confirmed_at from auth.users where id = uid(201)) is null);
+select t('024 the report is now the email account''s', (select reporter_id from issues where id = iid(201)) = uid(202));
+set role authenticated;
+select t('024 a ticket works only once', fails('select claim_as(202, ''t201'')'));
+reset role;
+
+-- the phone path: a phone whose number belongs to an existing phone-only account signs in to it
+set role authenticated;
+select t('024 a phone-only account can claim a ticket (phone-path sign-in)', claim_as(203, 't200') = 1);
+reset role;
+select t('024 ...the report moved and the account keeps its own number', (select reporter_id from issues where id = iid(200)) = uid(203) and (select phone from auth.users where id = uid(203)) = '+233200000002');
+
+-- an account that already has its own verified number keeps it
+set role authenticated;
+select ticket_for(206, 't206');
+select t('024 an account with its own verified number can claim', claim_as(204, 't206') = 1);
+reset role;
+select t('024 ...it keeps ITS number and the other one stays where it was', (select phone from auth.users where id = uid(204)) = '+233200000003' and (select phone from auth.users where id = uid(206)) = '+233200000004');
+select t('024 no number is held by two accounts', (select count(phone) from auth.users) = (select count(distinct phone) from auth.users));
+
+-- the old account gaining a confirmed email after the ticket was made makes the ticket useless
+set role authenticated;
+select ticket_for(207, 't207');
+reset role;
+update auth.users set email_confirmed_at = now() where id = uid(207);
+set role authenticated;
+select t('024 a ticket from an account that has since gained an email is refused', fails('select claim_as(202, ''t207'')'));
+reset role;
+select t('024 ...and nothing moved', (select reporter_id from issues where id = iid(207)) = uid(207));
 
 ----------------------------------------------------------------------------------------------------------------
 \o
