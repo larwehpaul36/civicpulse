@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { missingFor, REQUIRED, DUPLICATE_RADIUS_M, duplicateText } from '../lib/reportRules.js';
+import { missingFor, REQUIRED, DUPLICATE_RADIUS_M, duplicateText, duplicateKey, duplicateCheckDue } from '../lib/reportRules.js';
 
 const empty = { categoryId: '', photo: null, loc: null, regionId: '', isOther: false, otherLabel: '' };
 const photo = { name: 'x.jpg' };
@@ -52,4 +52,25 @@ test('duplicate check: wide enough for phone GPS, and the form really uses the s
 test('a match with no description tells people what to do instead of showing a dash', () => {
   assert.equal(duplicateText({ description: '  Big hole  ' }, 'x'), 'Big hole');
   for (const d of [{ description: null }, { description: '   ' }, {}, null]) assert.equal(duplicateText(d, 'fallback'), 'fallback');
+});
+
+test('the similar-report check is due once per category and spot, never for "Other", never offline', () => {
+  const loc = { lat: 5.60371, lng: -0.18701 };
+  const key = duplicateKey('c1', loc);
+  assert.equal(key, 'c1|5.60371|-0.18701');
+  assert.equal(duplicateKey('', loc), ''); assert.equal(duplicateKey('c1', null), ''); assert.equal(duplicateKey('c1', { lat: NaN, lng: 1 }), '');
+  assert.equal(duplicateCheckDue({ isOther: false, online: true, checkedKey: '', key }), true);
+  assert.equal(duplicateCheckDue({ isOther: false, online: true, checkedKey: key, key }), false, 'already checked for this category and spot');
+  assert.equal(duplicateCheckDue({ isOther: false, online: true, checkedKey: key, key: duplicateKey('c2', loc) }), true, 'a different category is checked again');
+  assert.equal(duplicateCheckDue({ isOther: false, online: true, checkedKey: key, key: duplicateKey('c1', { lat: 5.6041, lng: -0.1870 }) }), true, 'a moved spot is checked again');
+  assert.equal(duplicateCheckDue({ isOther: true, online: true, checkedKey: '', key }), false);
+  assert.equal(duplicateCheckDue({ isOther: false, online: false, checkedKey: '', key }), false);
+  assert.equal(duplicateCheckDue({ isOther: false, online: true, checkedKey: '', key: '' }), false, 'no spot yet');
+});
+
+test('the form runs the check on the place step, and its "different problem" button continues instead of sending from there', () => {
+  const src = readFileSync(new URL('../components/ReportForm.js', import.meta.url), 'utf8');
+  assert.match(src, /if \(step === 1 && duplicateCheckDue\(/);
+  assert.match(src, /if \(step === 2\) submit\(true\); else setStep\(2\);/);
+  assert.match(src, /duplicateCheckDue\(\{ isOther, online: navigator\.onLine, checkedKey, key: dupKey \}\)\) \{\s*setStatus\('checking'\);\s*stage = 'duplicates'/);
 });
