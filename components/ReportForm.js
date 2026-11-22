@@ -18,7 +18,7 @@ import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import EmergencyNotice from '@/components/EmergencyNotice';
 import { needsEmergencyNotice } from '@/lib/emergency';
-import { missingFor, DUPLICATE_RADIUS_M, duplicateText } from '@/lib/reportRules';
+import { missingFor, DUPLICATE_RADIUS_M, duplicateText, duplicateKey, duplicateCheckDue } from '@/lib/reportRules';
 import { Req } from '@/components/Req';
 import '@/components/forms.css';
 
@@ -59,6 +59,7 @@ export default function ReportForm() {
   const [detail, setDetail] = useState('');
   const [dupes, setDupes] = useState([]);
   const [confirmedIds, setConfirmedIds] = useState([]);
+  const [checkedKey, setCheckedKey] = useState(''); // category + spot already checked for similar reports
   const [savedId, setSavedId] = useState(null);
   const { items, running } = useOutbox();
 
@@ -85,6 +86,7 @@ export default function ReportForm() {
   // "Other problem": the person names it in a few words, and a moderator finds the right office.
   const otherId = categories.find((c) => c.slug === 'other')?.id;
   const isOther = !!otherId && f.categoryId === otherId;
+  const dupKey = duplicateKey(f.categoryId, loc);
 
   // What is still empty. Messages show only after Next was pressed on that step, and disappear by themselves once fixed.
   const vals = { categoryId: f.categoryId, photo, loc, regionId: f.regionId, isOther, otherLabel: f.otherLabel };
@@ -111,12 +113,13 @@ export default function ReportForm() {
     if (isOther && !f.otherLabel.trim()) return setError(s.other.missing);
     let stage = 'start';
     try {
-      if (!skipDuplicateCheck && !isOther && navigator.onLine) {
+      if (!skipDuplicateCheck && duplicateCheckDue({ isOther, online: navigator.onLine, checkedKey, key: dupKey })) {
         setStatus('checking');
         stage = 'duplicates';
         // A failed duplicate check must never stop someone from reporting.
         const found = await findDuplicates(loc, f.categoryId).catch(() => []);
         if (found?.length) { setDupes(found); return setStatus('idle'); }
+        if (found) setCheckedKey(dupKey);
       }
 
       setStatus('saving');
@@ -164,7 +167,7 @@ export default function ReportForm() {
   }
 
   function reset() {
-    setF(EMPTY); setPhoto(null); setLoc(null); setDupes([]); setConfirmedIds([]); setSavedId(null); setStatus('idle'); setStep(0);
+    setF(EMPTY); setPhoto(null); setLoc(null); setDupes([]); setConfirmedIds([]); setCheckedKey(''); setSavedId(null); setStatus('idle'); setStep(0);
     setError(''); setDetail(''); setTried({ 0: false, 1: false });
   }
 
@@ -174,13 +177,21 @@ export default function ReportForm() {
     formRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }, [step]);
 
-  function next() {
+  async function next() {
     setError(''); setDetail('');
     const miss = missingFor(step, vals);
     if (miss.length) {
       setTried((v) => ({ ...v, [step]: true }));
       setAttempt((n) => n + 1);
       return setError(step === 0 ? (miss.includes('category') || miss.includes('photo') ? s.flow.miss0 : s.other.missing) : s.flow.miss1);
+    }
+    // The spot is chosen: look for the same problem nearby BEFORE the review step. A failed or slow check never blocks the report.
+    if (step === 1 && duplicateCheckDue({ isOther, online: navigator.onLine, checkedKey, key: dupKey })) {
+      setStatus('checking');
+      const found = await findDuplicates(loc, f.categoryId).catch(() => null);
+      setStatus('idle');
+      if (found?.length) return setDupes(found);
+      if (found) setCheckedKey(dupKey);
     }
     setStep((n) => Math.min(2, n + 1));
   }
@@ -227,9 +238,11 @@ export default function ReportForm() {
           ))}
         </ul>
         {error && <p className="error" role="alert">{error}{detail && <small className="hint"> ({detail})</small>}</p>}
-        <button type="button" className="secondary" onClick={() => { setDupes([]); submit(true); }}>
+        <button type="button" onClick={() => { setDupes([]); setCheckedKey(dupKey); if (step === 2) submit(true); else setStep(2); }}>
           {s.differentIssue}
         </button>
+        {confirmedIds.length > 0 && <button type="button" onClick={reset}>{s.dupDone}</button>}
+        <button type="button" className="secondary" onClick={() => setDupes([])}>{s.dupBack}</button>
       </section>
     );
 
@@ -313,7 +326,7 @@ export default function ReportForm() {
       <div className="steprow">
         {step > 0 && <button type="button" className="secondary" onClick={back} disabled={busy}>{s.flow.back}</button>}
         <button type="submit" disabled={busy}>
-          {step < 2 ? s.flow.next : status === 'checking' ? s.checking : status === 'saving' ? s.saving : s.submit}
+          {status === 'checking' ? s.checking : step < 2 ? s.flow.next : status === 'saving' ? s.saving : s.submit}
         </button>
       </div>
     </form>
