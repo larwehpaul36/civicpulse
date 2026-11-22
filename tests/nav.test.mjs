@@ -41,3 +41,30 @@ test('Report (home) and About stay hidden on phones, after the layout rule that 
   assert.ok(hide > -1, 'hiding rule missing');
   assert.ok(hide > layout, 'hiding rule must come after the rule that sets display:flex');
 });
+
+test('desktop has a gold "Report a problem" button, last in the bar; it is a CTA, not a tab', () => {
+  const css = fs.readFileSync(new URL('../components/topbar.css', import.meta.url), 'utf8');
+  const navBlock = nav.slice(nav.indexOf('<nav className="nav"'), nav.indexOf('</nav>'));
+  assert.ok(navBlock.indexOf('navcta') > navBlock.indexOf('<MyReportsLink />'), 'the button comes after every tab, so tab order matches the screen');
+  assert.match(navBlock, /navhome navcta/, 'keeps navhome so the phone rule still hides it');
+  assert.match(css, /a\.navcta\[aria-current='page'\]/, 'stays gold on the home page');
+  assert.match(fs.readFileSync(new URL('../lib/strings.js', import.meta.url), 'utf8'), /navReportCta: 'Report a problem'/);
+  assert.match(navBlock, /aria-label=\{s\.navReportCta\}/, 'the full name stays as the accessible name when the label is shortened');
+});
+
+test('the desktop button shrinks in steps (full name, "Report", camera icon) so the bar never overflows on tablets', () => {
+  const css = fs.readFileSync(new URL('../components/topbar.css', import.meta.url), 'utf8');
+  assert.match(css, /\.ctamore \{ display: none; \}/);
+  assert.match(css, /\.ctaicon \{ display: block;/);
+  assert.match(nav, /className="ctaicon"[^>]*aria-hidden="true"/);
+});
+
+test('tablets get a two-row bar, so a language picker can never push the buttons off the edge (it did at 768px)', () => {
+  const css = fs.readFileSync(new URL('../components/topbar.css', import.meta.url), 'utf8');
+  const block = css.slice(css.lastIndexOf('@media (min-width: 40.01rem) and (max-width: 55.99rem)'));
+  assert.match(block, /\.topbar-in \{ flex-wrap: wrap;/);
+  assert.match(block, /\.topbar \.nav \{ order: 3; flex: 1 1 100%;/);
+  assert.match(block, /\.topbar-tools \{ order: 2; margin-left: auto; \}/);
+  assert.match(block, /a\.navcta \.ctaicon \{ display: none; \}/, 'the full name shows again, not just the camera');
+  assert.ok(css.lastIndexOf('55.99rem') > css.lastIndexOf('47.99rem'), 'comes after the small-tablet rules so it wins');
+});

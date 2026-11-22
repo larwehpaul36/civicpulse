@@ -81,3 +81,42 @@
   .menubtn[aria-expanded='true'] { background: var(--ink); color: var(--paper); box-shadow: none; }
 }
 @media (min-width: 40.01rem) { .menu-panel, .menu-scrim { display: none; } }
+
+/* Desktop "Report a problem" button: a gold action button, clearly not one of the page tabs. It stays gold on the home page too
+   (the active page tab is a dark pill, which used to make "Report" look like "Reports"). Hidden on phones by the rule above. */
+@media (min-width: 40.01rem) {
+  .topbar .nav a.navcta, .topbar .nav a.navcta[aria-current='page'] {
+    background: var(--signal); color: var(--on-signal); font-weight: 800; padding-left: 1.1rem; padding-right: 1.1rem; margin-left: .35rem;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--on-signal) 25%, transparent);
+  }
+  .topbar .nav a.navcta:hover { background: var(--signal-2); color: var(--on-signal); }
+  .topbar .nav a.navcta:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+}
+@media (min-width: 40.01rem) and (max-width: 52rem) { .topbar .nav a.navcta { padding-left: .8rem; padding-right: .8rem; font-size: .85rem; } .topbar .nav a { padding-left: .6rem; padding-right: .6rem; } }
+
+/* On small tablets the bar is full: show just "Report" (the full name stays as the accessible name). */
+@media (min-width: 40.01rem) and (max-width: 63.99rem) { .topbar .nav a.navcta .ctamore { display: none; } }
+/* Small tablets (about 640-767px): not even "Report" fits, so the button is just the camera, in the same gold. */
+.ctaicon { display: none; }
+@media (min-width: 40.01rem) and (max-width: 47.99rem) {
+  .topbar-in { gap: .4rem; padding-left: .6rem; padding-right: .6rem; }
+  .topbar .nav { gap: .1rem; }
+  .topbar .nav a { padding-left: .45rem; padding-right: .45rem; }
+  .topbar .nav a.navcta { width: 44px; padding: 0; justify-content: center; margin-left: .25rem; }
+  .topbar .nav a.navcta .ctatext { display: none; }
+  .topbar .nav a.navcta .ctaicon { display: block; width: 22px; height: 22px; flex: none; }
+}
+
+/* Tablets (641-895px): one row no longer fits once a language picker is showing (it ran off the edge at 768px, iPad portrait, with
+   two languages). So: row 1 is the logo on the left and the Aa and language buttons on the right; row 2 is the tabs, spread across
+   the full width, with the gold button showing its full name again. This comes last so it wins over the small-tablet rules above. */
+@media (min-width: 40.01rem) and (max-width: 55.99rem) {
+  .topbar-in { flex-wrap: wrap; row-gap: .1rem; padding-left: 1rem; padding-right: 1rem; }
+  .topbar-tools { order: 2; margin-left: auto; }
+  .topbar .nav { order: 3; flex: 1 1 100%; margin-left: 0; gap: .25rem; justify-content: space-between; }
+  .topbar .nav a { padding-left: .6rem; padding-right: .6rem; }
+  .topbar .nav a.navcta { width: auto; padding-left: .9rem; padding-right: .9rem; font-size: .95rem; margin-left: .35rem; justify-content: center; }
+  .topbar .nav a.navcta .ctatext { display: inline; }
+  .topbar .nav a.navcta .ctamore { display: inline; }
+  .topbar .nav a.navcta .ctaicon { display: none; }
+}
