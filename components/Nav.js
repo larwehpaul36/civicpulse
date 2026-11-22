@@ -11,7 +11,7 @@ import { home as h } from '@/lib/homeStrings';
 import '@/components/nav-about.css';
 import '@/components/topbar.css';
 
-const LINKS = [['/', 'navReport', 'navhome'], ['/issues', 'navIssues'], ['/tracker', 'navTracker'], ['/directory', 'navDirectory'], ['/about', 'navAbout', 'navabout']];
+const LINKS = [['/issues', 'navIssues'], ['/tracker', 'navTracker'], ['/directory', 'navDirectory'], ['/about', 'navAbout', 'navabout']];
 
 export default function Nav() {
   const path = usePathname();
@@ -28,12 +28,14 @@ export default function Nav() {
           {s.appName}
         </Link>
         <nav className="nav" aria-label="Main">
-          {LINKS.slice(0, 3).map(link)}
+          {LINKS.slice(0, 2).map(link)}
           <Link href="/#report" className="fab" aria-label={h.cta}>
             <svg viewBox="0 0 24 24" fill="none" stroke="#0e1f17" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>
           </Link>
-          {LINKS.slice(3).map(link)}
+          {LINKS.slice(2).map(link)}
           <MyReportsLink />
+          {/* Desktop only (hidden on phones, where the camera button does this job). Last in the page and on screen, so the tab order matches what you see. */}
+          <Link href="/" className="navhome navcta" aria-label={s.navReportCta} aria-current={path === '/' ? 'page' : undefined}><svg className="ctaicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg><span className="ctatext">{s.navReportShort}<span className="ctamore"> {s.navReportMore}</span></span></Link>
         </nav>
         <div className="topbar-tools"><TextSizeButton /><LanguageSwitch /><MenuButton /></div>
       </div>
