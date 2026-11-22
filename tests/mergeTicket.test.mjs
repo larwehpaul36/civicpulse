@@ -76,3 +76,34 @@ test('nothing stored, or storage that is damaged, is simply "nothing to do"', as
   assert.equal(await claimPending({ supabase, storage: junk }, 'a@b.co'), null);
   assert.equal(supabase.calls.length, 0);
 });
+
+// ---- phone numbers (migration 024) ----
+test('a ticket can be made for a phone number, and is handed over only to an account with that number', async () => {
+  const storage = memory();
+  assert.equal(await prepareMerge({ supabase: db({ create_merge_ticket: { data: 'secretP', error: null } }), storage, now: NOW }, { phone: '+233 24 123 4567' }), 'ready');
+  assert.deepEqual(JSON.parse(storage.getItem('civicpulse.mergeTicket')), { ticket: 'secretP', phone: '+233241234567', at: NOW });
+  const other = db({ claim_merge_ticket: { data: { moved: 2 }, error: null } });
+  assert.equal(await claimPending({ supabase: other, storage, now: NOW + 1000 }, { phone: '+233200000000' }), null, 'a different number never claims it');
+  assert.equal(await claimPending({ supabase: other, storage, now: NOW + 1000 }, 'someone@example.com'), null, 'an email account does not claim a phone ticket');
+  assert.equal(other.calls.length, 0);
+  assert.equal(storage.size(), 1, 'the ticket is kept for the right account');
+  const right = db({ claim_merge_ticket: { data: { moved: 2 }, error: null } });
+  assert.deepEqual(await claimPending({ supabase: right, storage, now: NOW + 2000 }, { phone: '+233241234567' }), { moved: 2 });
+  assert.equal(storage.size(), 0);
+});
+
+test('an email ticket is not claimed by a phone sign-in, and a ticket with no address at all is refused', async () => {
+  const storage = await made('ama@example.com');
+  const sb = db({ claim_merge_ticket: { data: { moved: 1 }, error: null } });
+  assert.equal(await claimPending({ supabase: sb, storage, now: NOW }, { phone: '+233241234567' }), null);
+  assert.equal(sb.calls.length, 0);
+  await assert.rejects(prepareMerge({ supabase: db({ create_merge_ticket: { data: 't', error: null } }), storage: memory() }, {}), /prepare_failed/);
+  await assert.rejects(prepareMerge({ supabase: db({ create_merge_ticket: { data: 't', error: null } }), storage: memory() }, '  '), /prepare_failed/);
+});
+
+test('a ticket saved by the older version (email only, no phone field) still works', async () => {
+  const storage = memory();
+  storage.setItem('civicpulse.mergeTicket', JSON.stringify({ ticket: 'old', email: 'ama@example.com', at: NOW }));
+  const sb = db({ claim_merge_ticket: { data: { moved: 1 }, error: null } });
+  assert.deepEqual(await claimPending({ supabase: sb, storage, now: NOW + 5 }, 'AMA@example.com'), { moved: 1 });
+});
