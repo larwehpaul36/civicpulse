@@ -4,6 +4,7 @@ import { categoryTitle } from '@/lib/categoryTitle';
 import { officesNear } from '@/lib/places';
 import { supabase } from '@/lib/supabase';
 import { linkUrl, makeReplyLink, revokeReplyLinks } from '@/lib/replyLinks';
+import { coordsText, googleMapsUrl, osmUrl } from '@/lib/mapLinks';
 import { compressImage } from '@/lib/compressImage';
 import { linksOf, otherEnd, parseIssueId, suggestions } from '@/lib/relatedIssues';
 import { strings as s } from '@/lib/strings';
@@ -12,7 +13,6 @@ import PhotoBlur from '@/components/PhotoBlur';
 
 const A = s.admin;
 const photoUrl = (path) => supabase.storage.from('issue-photos').getPublicUrl(path).data.publicUrl;
-const mapUrl = (lat, lng) => `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}`;
 const errText = (e) =>
   /after_photo_required/.test(e?.message) ? A.needAfter :
   /party_required/.test(e?.message) ? A.needParty :
@@ -57,7 +57,7 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
     severity: s.severityOptions[i.severity],
     days: i.days_open,
     confirmations: i.confirmation_count,
-    mapUrl: mapUrl(i.lat, i.lng),
+    mapUrl: googleMapsUrl(i.lat, i.lng),
     reportUrl: `${window.location.origin}/issues/${i.id}`,
     replyUrl,
   });
@@ -153,7 +153,17 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
             {i.before_path && <img src={photoUrl(i.before_path)} alt={s.a11y.beforePhoto} />}
             {i.after_path && <img src={photoUrl(i.after_path)} alt={s.a11y.afterPhoto} />}
           </div>
-          <p><a href={mapUrl(i.lat, i.lng)} target="_blank" rel="noopener noreferrer">{A.exactLocation}</a></p>
+          {googleMapsUrl(i.lat, i.lng) ? (
+            <div className="maplinks">
+              <p className="hint">{A.location.coords}: <code>{coordsText(i.lat, i.lng)}</code></p>
+              <p className="cta-row">
+                <a className="cta" href={googleMapsUrl(i.lat, i.lng)} target="_blank" rel="noopener noreferrer">{A.location.google}</a>
+                <a className="cta ghost" href={osmUrl(i.lat, i.lng)} target="_blank" rel="noopener noreferrer">{A.location.osm}</a>
+              </p>
+            </div>
+          ) : (
+            <p className="hint">{A.location.none}</p>
+          )}
 
           <h3>{A.links.title}</h3>
           {mine.length === 0 && <p className="hint">{A.links.none}</p>}
