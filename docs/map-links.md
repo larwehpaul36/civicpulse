@@ -11,3 +11,8 @@ Only the moderator's links changed.
 - Tests: `tests/mapLinks.test.mjs`. No migration. Nothing is sent to Google until someone taps the link.
 
 Check by hand: open 2-3 real reports, tap both links, confirm the pins match.
+
+## Moderator screen fixes (same build)
+- The gold "Open in Google Maps" button was dark-on-dark in dark mode: the general `.cards a` rule overrode it. It now has its own rule.
+- A long office name in a list made the page wider than the phone, so the top bar and flag stripe looked cut short. The `.cards` and `.panel` grids now use `minmax(0,1fr)`.
+- Responsible party: a "Search for an office" box above the list. Type any words of the name (any order, capitals and accents ignored); it searches all offices, and when one is left it is selected for the moderator.

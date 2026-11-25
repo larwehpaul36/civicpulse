@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { categoryTitle } from '@/lib/categoryTitle';
-import { officesNear } from '@/lib/places';
+import { filterOffices, officesNear } from '@/lib/places';
 import { supabase } from '@/lib/supabase';
 import { linkUrl, makeReplyLink, revokeReplyLinks } from '@/lib/replyLinks';
 import { coordsText, googleMapsUrl, osmUrl } from '@/lib/mapLinks';
@@ -31,11 +31,21 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
   const [remember, setRemember] = useState(!i.other_label); // an "Other" report must not teach the system a rule
   const [newCat, setNewCat] = useState('');
   const [showAll, setShowAll] = useState(false);
+  const [officeQ, setOfficeQ] = useState('');
   // 261 assemblies in one list is unusable: offer the ones near this report first (current choice always stays in the list).
   const near = officesNear(parties, regions, i.region_id);
   const base = showAll || near.length === 0 ? parties : near;
   const current = parties.find((p) => p.id === partyId);
-  const choices = !current || base.some((p) => p.id === current.id) ? base : [current, ...base];
+  const typed = officeQ.trim() !== '';
+  // Typing searches every office, not just the nearby ones, so the moderator never has to scroll a long list.
+  const pool = typed ? parties : base;
+  const found = filterOffices(pool, officeQ);
+  const choices = !current || found.some((p) => p.id === current.id) ? found : [current, ...found];
+  function typeOffice(e) {
+    const q = e.target.value; setOfficeQ(q);
+    const hits = filterOffices(q.trim() ? parties : base, q);
+    if (q.trim() && hits.length === 1) setPartyId(hits[0].id); // one match left: pick it for them
+  }
   const title = categoryTitle(categoryName, i.other_label);
   const [file, setFile] = useState(null);
   const [channel, setChannel] = useState('other');
@@ -211,8 +221,13 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
           <p><button type="button" className="secondary" disabled={busy || !manualId.trim()} onClick={linkManual}>{A.links.link}</button></p>
 
           <h3>{A.party}</h3>
+          <label>{A.searchParty}
+            <input type="search" value={officeQ} onChange={typeOffice} placeholder={A.searchPartyHint}
+              autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="search" />
+          </label>
+          <p className="hint" role="status" aria-live="polite">{typed ? (found.length ? A.matchCount(found.length) : A.noMatch) : ''}</p>
           <div className="row">
-            <select value={partyId} onChange={(e) => setPartyId(e.target.value)}>
+            <select value={partyId} onChange={(e) => setPartyId(e.target.value)} aria-label={A.party}>
               <option value="">{A.pickParty}</option>
               {choices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
