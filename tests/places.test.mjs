@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { placeLabel, districtsOf, regionOf, placeChain, officesNear } from '../lib/places.js';
+import { placeLabel, districtsOf, regionOf, placeChain, officesNear, filterOffices } from '../lib/places.js';
 
 const regions = [
   { id: 'g1', name: 'Ashanti', level: 'region', parent_id: null },
@@ -54,3 +54,16 @@ test('a report sees the offices near it first: its district, its region, nationa
   assert.deepEqual(names('a3'), ['Ho Municipal Assembly', 'National Agency']);
 });
 
+
+test('typing finds offices by any words in any order, ignoring capitals, accents and spaces', () => {
+  const offices = [{ id: 1, name: 'Ga East Municipal Assembly' }, { id: 2, name: 'Ga West Municipal Assembly' }, { id: 3, name: 'Zabzugu District Assembly' }, { id: 4, name: 'Atwima Nwabiagya' }];
+  assert.deepEqual(filterOffices(offices, 'ga east').map((o) => o.id), [1]);
+  assert.deepEqual(filterOffices(offices, '  MUNICIPAL   ga ').map((o) => o.id), [1, 2]);
+  assert.deepEqual(filterOffices(offices, 'assembly zab').map((o) => o.id), [3]);
+  assert.deepEqual(filterOffices(offices, 'nwabiagyá').map((o) => o.id), [4]);
+  assert.deepEqual(filterOffices(offices, 'Nwabiagya').map((o) => o.id), [4]);
+  assert.deepEqual(filterOffices(offices, 'xyz'), []);
+  assert.equal(filterOffices(offices, '').length, 4);
+  assert.equal(filterOffices(offices, null).length, 4);
+  assert.equal(filterOffices([{ id: 9, name: null }], 'a').length, 0);
+});

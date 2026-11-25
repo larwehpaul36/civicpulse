@@ -74,7 +74,7 @@ a { color:var(--ink); }
 @media (max-width:48rem) { .hero { grid-template-columns:1fr; padding-top:1.5rem; } .pulse { max-width:9rem; order:-1; justify-self:start; } .steps { grid-template-columns:1fr; } }
 
 /* ---- forms ---- */
-.panel { display:grid; gap:1.1rem; margin-top:1rem; }
+.panel { display:grid; grid-template-columns:minmax(0,1fr); gap:1.1rem; margin-top:1rem; }
 label, .field { display:grid; gap:.35rem; font-weight:700; }
 .label { font-weight:700; }
 select, input[type=file], textarea, input[type=text], input[type=email], input[type=tel] { font:inherit; width:100%; padding:.7rem .9rem; min-height:50px;
@@ -106,7 +106,7 @@ button:disabled { opacity:.55; cursor:progress; }
 /* ---- lists, report page, tracker ---- */
 .page-title { font-size:2.1rem; font-weight:900; letter-spacing:-.03em; margin:.5rem 0 1rem; animation:rise .6s var(--ease) both; }
 .filters { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem; }
-.cards { list-style:none; padding:0; margin:0; display:grid; gap:.8rem; }
+.cards { list-style:none; padding:0; margin:0; display:grid; grid-template-columns:minmax(0,1fr); gap:.8rem; }
 .cards li { animation:rise .6s var(--ease) both; }
 .cards li:nth-child(2){animation-delay:.06s} .cards li:nth-child(3){animation-delay:.12s} .cards li:nth-child(n+4){animation-delay:.18s}
 .cards a { display:grid; gap:.25rem; padding:1rem; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
@@ -130,7 +130,7 @@ th { background:color-mix(in srgb,var(--ink) 6%,var(--surface)); font-size:.85re
 .tabs { display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:1rem; }
 .tab { min-height:44px; background:var(--surface); color:var(--ink); box-shadow:inset 0 0 0 2px var(--line); }
 .tab.on { background:var(--ink); color:var(--paper); box-shadow:none; }
-.admin-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:.8rem 1rem; box-shadow:var(--shadow); }
+.admin-card { min-width:0; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:.8rem 1rem; box-shadow:var(--shadow); }
 .admin-card[open] { border-color:var(--ink); }
 .admin-card summary { cursor:pointer; min-height:44px; display:flex; align-items:center; flex-wrap:wrap; gap:.3rem; }
 .admin-body { margin-top:.8rem; } .admin-body h3 { font-size:1rem; margin:1.2rem 0 .4rem; }
@@ -314,3 +314,10 @@ body { min-height:100dvh; }
 
 /* ---- language switch ---- */
 .langswitch { font: inherit; padding:.35rem .5rem; border-radius:8px; border:2px solid var(--line); background:var(--surface); color:inherit; min-height:44px; }
+
+/* Map links inside the moderator's cards: the general ".cards a" rule must not restyle these buttons (it made the gold one dark-on-dark). */
+.cards .maplinks .cta-row { margin:.2rem 0 1rem; }
+.cards .maplinks a.cta { display:inline-flex; padding:.7rem 1.4rem; border:0; border-radius:999px; background:var(--signal); color:var(--on-signal); box-shadow:0 8px 20px -10px var(--signal); }
+.cards .maplinks a.cta.ghost { background:transparent; color:var(--ink); box-shadow:inset 0 0 0 2px var(--line); }
+@media (max-width:40rem) { .cards .maplinks a.cta { width:100%; justify-content:center; } }
+.admin-card select, .admin-card input { max-width:100%; }

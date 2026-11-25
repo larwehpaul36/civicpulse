@@ -46,3 +46,10 @@ test('the admin screen uses the helper, opens links safely and no longer builds 
   assert.ok(/googleMapsUrl\(i\.lat, i\.lng\)/.test(src) && /osmUrl\(i\.lat, i\.lng\)/.test(src));
   assert.equal((src.match(/rel="noopener noreferrer"/g) || []).length >= 2, true);
 });
+
+test('moderator cards cannot stretch the page, and the map buttons keep their own colours', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  assert.ok(/\.cards \{[^}]*grid-template-columns:minmax\(0,1fr\)/.test(css), 'a long office name must not widen the list');
+  assert.ok(/\.panel \{[^}]*grid-template-columns:minmax\(0,1fr\)/.test(css));
+  assert.ok(/\.cards \.maplinks a\.cta \{[^}]*background:var\(--signal\)/.test(css), 'gold button must beat ".cards a"');
+});
