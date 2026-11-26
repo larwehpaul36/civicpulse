@@ -178,6 +178,8 @@ export default function AdminPage() {
         <>
           <div className="tabs" role="tablist">
             {[...Object.keys(VIEWS), 'followup', 'promises', 'directory', 'staff'].map((k) => (
+            {[...Object.keys(VIEWS), 'promises', 'directory', 'staff'].map((k) => (
+
               <button key={k} type="button" role="tab" aria-selected={view === k}
                 className={view === k ? 'tab on' : 'tab'} onClick={() => setView(k)}>
                 {A.views[k]}{counts[k] === undefined ? '' : ` (${counts[k]})`}
@@ -189,6 +191,7 @@ export default function AdminPage() {
             <PromiseStats rows={issues} names={Object.fromEntries(parties.map((x) => [x.id, x.name]))} />
           ) : view === 'followup' ? (
             <AdminFollowUp rows={queue} categoryNames={catName} parties={parties} onChanged={refresh} />
+
           ) : view === 'staff' ? (
             <AdminOfficeStaff parties={parties} />
           ) : view === 'directory' ? (

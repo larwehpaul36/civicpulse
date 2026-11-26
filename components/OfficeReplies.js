@@ -27,6 +27,7 @@ export default function OfficeReplies({ issueId, status, partyName }) {
             {r.kind === 'not_ours' && <><strong>{t.notOurs}.</strong> </>}
             {r.body && <span>“{r.body}”</span>}
             {r.source === 'link' && <small className="hint"> ({t.viaLink})</small>}
+            {r.source === 'office' && <small className="hint"> ({t.viaOffice})</small>}
           </li>
         ))}
       </ul>
