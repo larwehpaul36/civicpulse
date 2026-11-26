@@ -8,6 +8,7 @@ import { strings as s } from '@/lib/strings';
 import AdminIssue from '@/components/AdminIssue';
 import PromiseStats from '@/components/PromiseStats';
 import AdminSuggestion from '@/components/AdminSuggestion';
+import AdminOfficeStaff from '@/components/AdminOfficeStaff';
 import { isDisputed, mergeFixChecks } from '@/lib/adminFix';
 
 const A = s.admin;
@@ -172,7 +173,7 @@ export default function AdminPage() {
       {signedIn && role === 'yes' && (
         <>
           <div className="tabs" role="tablist">
-            {[...Object.keys(VIEWS), 'promises', 'directory'].map((k) => (
+            {[...Object.keys(VIEWS), 'promises', 'directory', 'staff'].map((k) => (
               <button key={k} type="button" role="tab" aria-selected={view === k}
                 className={view === k ? 'tab on' : 'tab'} onClick={() => setView(k)}>
                 {A.views[k]}{counts[k] === undefined ? '' : ` (${counts[k]})`}
@@ -182,6 +183,8 @@ export default function AdminPage() {
 
           {view === 'promises' ? (
             <PromiseStats rows={issues} names={Object.fromEntries(parties.map((x) => [x.id, x.name]))} />
+          ) : view === 'staff' ? (
+            <AdminOfficeStaff parties={parties} />
           ) : view === 'directory' ? (
             <>
               {suggestions.length === 0 && <p>{A.directory.none}</p>}
