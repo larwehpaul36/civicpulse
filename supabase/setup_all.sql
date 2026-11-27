@@ -1,4 +1,4 @@
--- CivicPulse: all migrations 001-022 in order. Paste into the Supabase SQL editor on a FRESH project.
+-- CivicPulse: all migrations 001-030 in order. Paste into the Supabase SQL editor on a FRESH project.
 -- Generated from the numbered files; edit those, not this. Rebuild: node scripts/build-setup-sql.mjs > supabase/setup_all.sql
 
 -- ===================== 001_civicpulse_schema.sql =====================
@@ -2297,3 +2297,878 @@ create trigger notify_office_reply after insert on public.office_replies
 
 -- CHECK: add a test reply as a moderator in /admin, then in the SQL editor:
 --   select user_id, to_status, created_at from notifications where to_status like 'office_%' order by created_at desc limit 5;
+
+-- ===================== 023_category_translations_draft.sql =====================
+-- 023: DRAFT Twi and Hausa names for the problem types and their groups. Run after 021. Safe to run twice (it only adds or overwrites the "tw" and "ha" keys).
+-- These are AI drafts and are NOT reviewed. They do no harm until the language is switched on in the app (lib/languages.js status 'live', or
+-- NEXT_PUBLIC_SHOW_UNREVIEWED_LANGS=1 on Vercel Preview), because the app falls back to English for any language it is not showing.
+-- To correct a word later, edit it here and run the file again. Ewe ("ee") and Ga ("gaa") are not included yet.
+
+update categories set name = name || v.t::jsonb
+from (values
+  ('overflowing-bin',     '{"tw":"Fi-kora a ayɛ ma","ha":"Kwandon shara da ya cika"}'),
+  ('illegal-dumping',     '{"tw":"Fi a wɔtow wɔ baabi a ɛnyɛ","ha":"Zubar da shara ba bisa ƙa’ida ba"}'),
+  ('choked-gutter',       '{"tw":"Nsuo-kwan a abɔ mu","ha":"Magudanar ruwa da ta toshe"}'),
+  ('pothole',             '{"tw":"Ɔkwan so amoa","ha":"Rami a hanya"}'),
+  ('broken-streetlight',  '{"tw":"Abɔnten hann a abubu","ha":"Fitilar titi da ta lalace"}'),
+  ('burst-pipe',          '{"tw":"Nsuo-pɛɛpɛ a apae","ha":"Bututun ruwa da ya fashe"}'),
+  ('open-manhole',        '{"tw":"Amoa a wɔabue (manhole)","ha":"Murfin magudanar da aka buɗe (manhole)"}'),
+  ('other',               '{"tw":"Ɔhaw foforo","ha":"Wata matsala"}')
+) as v(slug, t)
+where categories.slug = v.slug;
+
+update category_groups set name = name || v.t::jsonb
+from (values
+  ('sanitation', '{"tw":"Ahotɔ","ha":"Tsabta"}'),
+  ('drainage',   '{"tw":"Nsuo kwan ne nsuyiri","ha":"Magudanar ruwa da ambaliya"}'),
+  ('roads',      '{"tw":"Akwan","ha":"Hanyoyi"}'),
+  ('lighting',   '{"tw":"Hann ne ahoɔden","ha":"Haske da wutar lantarki"}'),
+  ('water',      '{"tw":"Nsuo","ha":"Ruwa"}'),
+  ('safety',     '{"tw":"Banbɔ","ha":"Tsaro"}'),
+  ('public',     '{"tw":"Mmeae a ɔmanfoɔ de di dwuma","ha":"Wuraren jama’a"}'),
+  ('other',      '{"tw":"Ɛnni ɔhaw-nhyehyɛeɛ no mu","ha":"Ba a cikin jerin ba"}')
+) as v(slug, t)
+where category_groups.slug = v.slug;
+
+-- CHECK: select slug, name from categories order by slug;   -- each name should now have "en", "tw" and "ha"
+
+-- ===================== 024_merge_carries_phone.sql =====================
+-- 024: make the account merge (017) work with phone numbers too. Run after 017. Safe to run twice.
+-- It does NOT switch the phone rules on (that is still 011b) and changes nothing for residents who never verified a phone.
+--
+-- What was wrong (HANDOVER, "gap 1"):
+--   1. A phone that had verified a number and then signed in to an email account brought its reports along, but the verified
+--      number stayed behind on the old account. The email account stayed "unverified", and verifying the same number again could
+--      be refused as already used.
+--   2. A phone whose number already belonged to another account was signed in to that account by the phone check, and this
+--      phone's own reports were left behind: there was no merge step on that path.
+--   3. Supabase may switch an account's is_anonymous flag to false once a phone is linked, and the merge only accepted accounts
+--      that were still flagged anonymous, so such a phone could not make a ticket at all.
+--
+-- What changes (everything else in 017 stays exactly as it was):
+--   * "Old account" now means "an account with no confirmed email", instead of relying on the is_anonymous flag.
+--     A plain anonymous account has no email, so everything that worked before still works.
+--   * "New account" may be proved by a confirmed email (as before) OR a confirmed phone number (the phone-path sign-in).
+--   * If the old account has a confirmed phone number and the new account has none, the number moves with the reports
+--     (cleared from the old account first, because a number can belong to only one account).
+--   * If the new account already has its own confirmed number, it keeps it and the old number is left where it is.
+-- The ticket rules are unchanged: a secret only that phone saw, kept as a fingerprint, used once, within 24 hours.
+
+create or replace function create_merge_ticket() returns text
+language plpgsql security definer set search_path = public, auth as $$
+declare
+  v_uid uuid := auth.uid();
+  v_ticket text;
+begin
+  if v_uid is null then raise exception 'not_signed_in'; end if;
+  if not exists (select 1 from auth.users u where u.id = v_uid and u.email_confirmed_at is null) then
+    raise exception 'not_anonymous';                       -- an account with a confirmed email has nothing to merge (same code as before)
+  end if;
+  delete from merge_tickets where from_user = v_uid;      -- one live ticket per account
+  v_ticket := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
+  insert into merge_tickets (token_hash, from_user, expires_at)
+    values (encode(sha256(convert_to(v_ticket, 'UTF8')), 'hex'), v_uid, now() + interval '24 hours');
+  return v_ticket;
+end $$;
+
+create or replace function claim_merge_ticket(p_ticket text) returns jsonb
+language plpgsql security definer set search_path = public, auth as $$
+declare
+  v_to   uuid := auth.uid();
+  v_hash text := encode(sha256(convert_to(coalesce(p_ticket, ''), 'UTF8')), 'hex');
+  v_from uuid;
+  v_moved int := 0;
+  v_phone text;
+  v_phone_at timestamptz;
+begin
+  if v_to is null then raise exception 'not_signed_in'; end if;
+  if not exists (select 1 from auth.users u where u.id = v_to and (u.email_confirmed_at is not null or u.phone_confirmed_at is not null)) then
+    raise exception 'not_permanent';                       -- only into an account whose email OR phone number is confirmed
+  end if;
+
+  select t.from_user into v_from from merge_tickets t
+   where t.token_hash = v_hash and t.used_at is null and t.expires_at > now() for update;
+  if v_from is null then raise exception 'ticket_invalid'; end if;
+
+  if v_from = v_to then                                    -- opened where they were already signed in: nothing to move
+    update merge_tickets set used_at = now() where token_hash = v_hash;
+    return jsonb_build_object('moved', 0);
+  end if;
+  if not exists (select 1 from auth.users u where u.id = v_from and u.email_confirmed_at is null) then
+    raise exception 'ticket_invalid';                      -- the old account has since gained a confirmed email
+  end if;
+
+  update issues set reporter_id = v_to where reporter_id = v_from;
+  get diagnostics v_moved = row_count;
+  update issue_photos set uploaded_by = v_to where uploaded_by = v_from;
+
+  -- Confirmations: never count one person twice, and never leave someone confirming their own report.
+  with gone as (
+    delete from confirmations c
+     where (c.user_id = v_from and (exists (select 1 from confirmations b where b.issue_id = c.issue_id and b.user_id = v_to)
+                                    or exists (select 1 from issues i where i.id = c.issue_id and i.reporter_id = v_to)))
+        or (c.user_id = v_to and exists (select 1 from issues i where i.id = c.issue_id and i.reporter_id = v_to))
+    returning c.issue_id, coalesce(c.counts, true) as counted
+  )
+  update issues i set confirmation_count = greatest(0, i.confirmation_count - g.n)
+    from (select issue_id, count(*) filter (where counted) as n from gone group by issue_id) g
+   where i.id = g.issue_id and g.n > 0;
+  update confirmations set user_id = v_to where user_id = v_from;
+
+  delete from flags f where f.user_id = v_from and exists (select 1 from flags b where b.issue_id = f.issue_id and b.user_id = v_to);
+  update flags set user_id = v_to where user_id = v_from;
+
+  if to_regclass('public.fix_checks') is not null then       -- "Is it fixed?" answers (019), when that migration has been run
+    execute 'delete from fix_checks f where f.user_id = $1 and exists (select 1 from fix_checks b where b.issue_id = f.issue_id and b.cycle = f.cycle and b.user_id = $2)' using v_from, v_to;
+    execute 'update fix_checks set user_id = $2 where user_id = $1' using v_from, v_to;
+  end if;
+  update notifications set user_id = v_to where user_id = v_from;
+  update push_subscriptions set user_id = v_to where user_id = v_from;
+  delete from notification_contacts where user_id = v_from and exists (select 1 from notification_contacts where user_id = v_to);
+  update notification_contacts set user_id = v_to where user_id = v_from;
+  update directory_suggestions set suggested_by = v_to where suggested_by = v_from;
+
+  -- NEW in 024: the verified phone number travels with the reports, unless the new account already has its own.
+  select u.phone, u.phone_confirmed_at into v_phone, v_phone_at from auth.users u where u.id = v_from;
+  if v_phone is not null and v_phone <> '' and v_phone_at is not null
+     and exists (select 1 from auth.users u where u.id = v_to and u.phone_confirmed_at is null) then
+    update auth.users set phone = null, phone_confirmed_at = null where id = v_from;   -- a number belongs to one account only
+    update auth.users set phone = v_phone, phone_confirmed_at = v_phone_at where id = v_to;
+  end if;
+
+  update merge_tickets set used_at = now() where token_hash = v_hash;
+  return jsonb_build_object('moved', v_moved);
+end $$;
+
+revoke all on function create_merge_ticket() from public, anon, authenticated;
+revoke all on function claim_merge_ticket(text) from public, anon, authenticated;
+grant execute on function create_merge_ticket() to authenticated;
+grant execute on function claim_merge_ticket(text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- CHECKS. Each should run without an error.
+-- A) Same permissions as 017 (expect: f, t, f, t):
+select has_function_privilege('anon', 'create_merge_ticket()', 'execute') as anon_can,
+       has_function_privilege('authenticated', 'create_merge_ticket()', 'execute') as signed_in_can,
+       has_function_privilege('anon', 'claim_merge_ticket(text)', 'execute') as anon_can_claim,
+       has_function_privilege('authenticated', 'claim_merge_ticket(text)', 'execute') as signed_in_can_claim;
+-- B) The new rule is in place (expect: true for both):
+select pg_get_functiondef('create_merge_ticket()'::regprocedure) like '%email_confirmed_at is null%' as old_rule_is_no_email,
+       pg_get_functiondef('claim_merge_ticket(text)'::regprocedure) like '%phone_confirmed_at is not null%' as phone_target_allowed;
+
+-- ===================== 025_office_reply_links.sql =====================
+-- 025: one-tap reply links for offices. Run after 021 and 022. Safe to run twice.
+-- A moderator sends a case to an office by WhatsApp or email (a prepared message). This adds a private link to that message.
+-- The officer opens it, picks "a reply", "an expected fix date" or "not our job", and sends. No sign-in, no app.
+-- The reply is public at once, labelled "sent through a reply link" (not "verified"), and followers are notified (trigger from 022).
+--
+-- Safety, in plain words:
+--   * The link carries a long random secret. Only its SHA-256 hash is stored, so a database leak cannot reveal live links.
+--   * A link works for one report only, expires (30 days by default, 60 at most) and can be revoked by a moderator.
+--   * A moderator keeps at most the 5 newest links per report; older ones stop working.
+--   * Replies through links are limited to 5 per report per day.
+--   * A wrong, expired or revoked link all look the same to the visitor ("link_invalid"), so nobody can probe which exist.
+--   * Moderators can still hide any reply (admin_hide_office_reply from 021). Hidden replies leave the public page.
+--   * Anyone holding the link can reply: it is a shared secret, not proof of who the person is. That is why the page says so.
+
+create table if not exists office_reply_links (
+  id          uuid primary key default gen_random_uuid(),
+  issue_id    uuid not null references issues(id) on delete cascade,
+  party_id    uuid references responsible_parties(id) on delete set null,
+  token_hash  text not null unique,
+  created_by  uuid,
+  created_at  timestamptz not null default now(),
+  expires_at  timestamptz not null,
+  revoked_at  timestamptz
+);
+create index if not exists office_reply_links_issue_idx on office_reply_links (issue_id, created_at);
+alter table office_reply_links enable row level security;     -- no policies: every read and write goes through the functions below
+revoke all on office_reply_links from anon, authenticated;
+
+-- Where a public reply came from. Existing rows stay 'moderator'.
+alter table office_replies add column if not exists source text not null default 'moderator';
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'office_replies_source_check') then
+    alter table office_replies add constraint office_replies_source_check check (source in ('moderator', 'link'));
+  end if;
+end $$;
+grant select (source) on office_replies to anon, authenticated;
+
+create or replace function public.reply_token_hash(p text) returns text
+language sql immutable as $$ select encode(sha256(convert_to(coalesce(p, ''), 'UTF8')), 'hex') $$;
+revoke all on function public.reply_token_hash(text) from public, anon, authenticated;
+
+-- Moderator: make a link for a report. Returns the secret ONCE; it cannot be read back later.
+create or replace function public.admin_make_reply_link(p_issue uuid, p_days int default 30)
+returns text
+language plpgsql security definer set search_path = public as $$
+declare v_party uuid; v_token text;
+begin
+  perform assert_moderator();
+  if p_days is null or p_days < 1 or p_days > 60 then raise exception 'bad_days'; end if;
+  select party_id into v_party from issues where id = p_issue and status <> 'rejected';
+  if not found then raise exception 'issue_not_found'; end if;
+  if v_party is null then raise exception 'no_party'; end if;
+  v_token := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');   -- 64 hex characters, about 244 random bits
+  insert into office_reply_links (issue_id, party_id, token_hash, created_by, expires_at)
+  values (p_issue, v_party, reply_token_hash(v_token), auth.uid(), now() + make_interval(days => p_days));
+  -- keep only the 5 newest live links for this report
+  update office_reply_links set revoked_at = now()
+   where issue_id = p_issue and revoked_at is null
+     and id not in (select id from office_reply_links where issue_id = p_issue and revoked_at is null order by created_at desc, id desc limit 5);
+  return v_token;
+end $$;
+
+-- Moderator: switch off every link for a report (a link was forwarded to the wrong person, say). Returns how many were live.
+create or replace function public.admin_revoke_reply_links(p_issue uuid)
+returns int
+language plpgsql security definer set search_path = public as $$
+declare v_n int;
+begin
+  perform assert_moderator();
+  update office_reply_links set revoked_at = now() where issue_id = p_issue and revoked_at is null and expires_at > now();
+  get diagnostics v_n = row_count;
+  return v_n;
+end $$;
+
+-- Visitor with a link: what the page may show. Only what the public report page already shows. No rows = bad link.
+create or replace function public.office_link_info(p_token text)
+returns table (issue_id uuid, party_name text, category_id uuid, status text, description text,
+               created_at timestamptz, sent_at timestamptz, expires_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select i.id, p.name, i.category_id, i.status::text, i.description, i.created_at, i.sent_at, l.expires_at
+    from office_reply_links l
+    join issues i on i.id = l.issue_id
+    left join responsible_parties p on p.id = l.party_id
+   where l.token_hash = reply_token_hash(p_token)
+     and l.revoked_at is null and l.expires_at > now()
+     and i.status <> 'rejected'
+$$;
+
+-- Visitor with a link: record a public reply. Same rules as a moderator's (021), plus the link checks and a daily limit.
+create or replace function public.office_reply_via_link(
+  p_token text, p_kind text, p_body text default null, p_expected date default null
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare v_issue uuid; v_party uuid; v_id uuid; v_body text := nullif(btrim(coalesce(p_body, '')), '');
+begin
+  select l.issue_id, l.party_id into v_issue, v_party
+    from office_reply_links l join issues i on i.id = l.issue_id
+   where l.token_hash = reply_token_hash(p_token)
+     and l.revoked_at is null and l.expires_at > now() and i.status <> 'rejected';
+  if not found then raise exception 'link_invalid'; end if;
+  if v_party is null then raise exception 'link_invalid'; end if;
+  if p_kind is null or p_kind not in ('reply', 'expected_date', 'not_ours') then raise exception 'bad_kind'; end if;
+  if p_kind <> 'expected_date' and v_body is null then raise exception 'text_required'; end if;
+  if v_body is not null and char_length(v_body) > 500 then raise exception 'too_long'; end if;
+  if p_kind = 'expected_date' then
+    if p_expected is null then raise exception 'date_required'; end if;
+    if p_expected < current_date or p_expected > current_date + 365 then raise exception 'bad_date'; end if;
+  else
+    p_expected := null;
+  end if;
+  if (select count(*) from office_replies where issue_id = v_issue and source = 'link' and created_at > now() - interval '1 day') >= 5 then
+    raise exception 'rate_limited';
+  end if;
+  insert into office_replies (issue_id, party_id, kind, body, expected_date, source)
+  values (v_issue, v_party, p_kind, v_body, p_expected, 'link')
+  returning id into v_id;
+  return v_id;
+end $$;
+
+revoke all on function public.admin_make_reply_link(uuid, int) from public, anon;
+revoke all on function public.admin_revoke_reply_links(uuid) from public, anon;
+grant execute on function public.admin_make_reply_link(uuid, int) to authenticated;
+grant execute on function public.admin_revoke_reply_links(uuid) to authenticated;
+revoke all on function public.office_link_info(text) from public;
+revoke all on function public.office_reply_via_link(text, text, text, date) from public;
+grant execute on function public.office_link_info(text) to anon, authenticated;
+grant execute on function public.office_reply_via_link(text, text, text, date) to anon, authenticated;
+
+-- CHECK (expect: permission denied): set role anon; select token_hash from office_reply_links limit 1; reset role;
+-- CHECK (expect: no rows for a made-up link): set role anon; select * from office_link_info('nonsense'); reset role;
+
+-- ===================== 026_office_staff.sql =====================
+-- 026: office staff accounts. Run after 025. Safe to run twice.
+-- A moderator invites a staff member of an assembly BY EMAIL. The staff member opens /office, asks for an email sign-in link
+-- (same as moderators), and then sees only the reports sent to THEIR office, and can reply to them in public.
+--   * Nobody can sign up for office access on their own: access exists only for an email a moderator invited.
+--   * Access is checked on every call (never cached in the browser), so a moderator can switch someone off instantly.
+--   * Only a CONFIRMED email counts, and anonymous resident accounts never do.
+--   * Staff see only reports that belong to their office and have already been sent to it (sent, in progress, resolved).
+--   * Staff can reply (a message, an expected fix date, "not our job"). They cannot change a status, add a photo,
+--     hide anything, or see other offices' reports. Their replies are stored with source 'office'.
+--   * Staff emails are personal data: the table is private and only moderators can list it, through functions.
+
+create table if not exists office_staff (
+  id           uuid primary key default gen_random_uuid(),
+  email        text not null,
+  party_id     uuid not null references responsible_parties(id) on delete cascade,
+  invited_by   uuid,
+  created_at   timestamptz not null default now(),
+  last_seen_at timestamptz,
+  revoked_at   timestamptz,
+  revoked_by   uuid,
+  constraint office_staff_email_ok check (email = lower(btrim(email)) and char_length(email) <= 254 and email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$')
+);
+create unique index if not exists office_staff_active_idx on office_staff (email, party_id) where revoked_at is null;
+create index if not exists office_staff_party_idx on office_staff (party_id) where revoked_at is null;
+
+alter table office_staff enable row level security;     -- no policies: every read and write goes through the functions below
+revoke all on office_staff from anon, authenticated;
+
+-- A reply from a signed-in office is a third kind of source.
+alter table office_replies drop constraint if exists office_replies_source_check;
+alter table office_replies add constraint office_replies_source_check check (source in ('moderator', 'link', 'office'));
+
+-- The offices the CURRENT user works for. Internal: nobody calls it directly, only the functions below.
+create or replace function public.staff_party_ids()
+returns setof uuid
+language sql stable security definer set search_path = public, auth as $$
+  select s.party_id
+    from public.office_staff s
+    join auth.users u on lower(u.email) = s.email
+   where u.id = auth.uid()
+     and u.email_confirmed_at is not null
+     and coalesce(u.is_anonymous, false) = false
+     and s.revoked_at is null;
+$$;
+revoke all on function public.staff_party_ids() from public, anon, authenticated;
+
+-- ---- what office staff call ----
+
+create or replace function public.staff_my_offices()
+returns table (party_id uuid, name text)
+language plpgsql security definer set search_path = public, auth as $$
+begin
+  update office_staff s set last_seen_at = now()
+   where s.party_id in (select staff_party_ids())
+     and (s.last_seen_at is null or s.last_seen_at < now() - interval '1 hour')
+     and s.email = (select lower(u.email) from auth.users u where u.id = auth.uid());
+  return query
+    select p.id, p.name from responsible_parties p where p.id in (select staff_party_ids()) order by p.name;
+end $$;
+
+create or replace function public.staff_list_issues()
+returns table (
+  id uuid, category_id uuid, other_label text, region_id uuid, party_id uuid, party_name text,
+  severity text, description text, status text, confirmation_count int,
+  created_at timestamptz, sent_at timestamptz, resolved_at timestamptz, days_open int,
+  lat double precision, lng double precision, before_path text, after_path text,
+  replies_count int, last_reply_at timestamptz, expected_date date)
+language plpgsql stable security definer set search_path = public, extensions as $$
+begin
+  return query
+  select i.id, i.category_id, i.other_label, i.region_id, i.party_id, p.name,
+         i.severity::text, i.description, i.status::text, i.confirmation_count,
+         i.created_at, i.sent_at, i.resolved_at,
+         extract(day from coalesce(i.resolved_at, now()) - i.created_at)::int,
+         st_y(i.location::geometry), st_x(i.location::geometry),
+         (select ph.storage_path from issue_photos ph where ph.issue_id = i.id and ph.kind = 'before' order by ph.created_at limit 1),
+         (select ph.storage_path from issue_photos ph where ph.issue_id = i.id and ph.kind = 'after' order by ph.created_at desc limit 1),
+         (select count(*)::int from office_replies r where r.issue_id = i.id and r.removed_at is null),
+         (select max(r.created_at) from office_replies r where r.issue_id = i.id and r.removed_at is null),
+         (select max(r.expected_date) from office_replies r where r.issue_id = i.id and r.removed_at is null and r.kind = 'expected_date')
+    from issues i
+    join responsible_parties p on p.id = i.party_id
+   where i.party_id in (select staff_party_ids())
+     and i.duplicate_of is null
+     and i.status::text in ('sent', 'in_progress', 'resolved')
+   order by i.sent_at nulls last, i.created_at
+   limit 300;
+end $$;
+
+create or replace function public.staff_add_reply(
+  p_issue uuid, p_kind text, p_body text default null, p_expected date default null
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare v_party uuid; v_status text; v_id uuid; v_body text := nullif(btrim(coalesce(p_body, '')), '');
+begin
+  if auth.uid() is null then raise exception 'not_staff' using errcode = '42501'; end if;
+  select party_id, status::text into v_party, v_status from issues where id = p_issue and duplicate_of is null;
+  -- one answer for "does not exist" and "not yours", so staff cannot probe other offices' reports
+  if v_party is null or v_party not in (select staff_party_ids()) then raise exception 'issue_not_found'; end if;
+  if v_status not in ('sent', 'in_progress') then raise exception 'not_open'; end if;
+  if p_kind is null or p_kind not in ('reply', 'expected_date', 'not_ours') then raise exception 'bad_kind'; end if;
+  if p_kind <> 'expected_date' and v_body is null then raise exception 'text_required'; end if;
+  if v_body is not null and char_length(v_body) > 500 then raise exception 'too_long'; end if;
+  if p_kind = 'expected_date' then
+    if p_expected is null then raise exception 'date_required'; end if;
+    if p_expected < current_date or p_expected > current_date + 365 then raise exception 'bad_date'; end if;
+  else
+    p_expected := null;
+  end if;
+  if (select count(*) from office_replies where issue_id = p_issue and source = 'office' and relayed_by = auth.uid()
+        and created_at > now() - interval '1 day') >= 10 then
+    raise exception 'rate_limited';
+  end if;
+  insert into office_replies (issue_id, party_id, kind, body, expected_date, relayed_by, source)
+  values (p_issue, v_party, p_kind, v_body, p_expected, auth.uid(), 'office')
+  returning id into v_id;
+  return v_id;
+end $$;
+
+-- ---- what moderators call ----
+
+create or replace function public.admin_invite_office_staff(p_email text, p_party uuid)
+returns uuid
+language plpgsql security definer set search_path = public as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); v_id uuid;
+begin
+  perform assert_moderator();
+  if char_length(v_email) > 254 or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then raise exception 'bad_email'; end if;
+  if not exists (select 1 from responsible_parties where id = p_party) then raise exception 'party_not_found'; end if;
+  select id into v_id from office_staff where email = v_email and party_id = p_party and revoked_at is null;
+  if v_id is not null then return v_id; end if;                                       -- already invited: nothing to do
+  if (select count(*) from office_staff where party_id = p_party and revoked_at is null) >= 10 then raise exception 'too_many'; end if;
+  insert into office_staff (email, party_id, invited_by) values (v_email, p_party, auth.uid()) returning id into v_id;
+  return v_id;
+end $$;
+
+create or replace function public.admin_list_office_staff()
+returns table (id uuid, email text, party_id uuid, party_name text, created_at timestamptz, last_seen_at timestamptz)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  perform assert_moderator();
+  return query
+    select s.id, s.email, s.party_id, p.name, s.created_at, s.last_seen_at
+      from office_staff s join responsible_parties p on p.id = s.party_id
+     where s.revoked_at is null
+     order by p.name, s.email;
+end $$;
+
+create or replace function public.admin_revoke_office_staff(p_id uuid)
+returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform assert_moderator();
+  update office_staff set revoked_at = now(), revoked_by = auth.uid() where id = p_id and revoked_at is null;
+end $$;
+
+revoke all on function public.staff_my_offices() from public, anon;
+revoke all on function public.staff_list_issues() from public, anon;
+revoke all on function public.staff_add_reply(uuid, text, text, date) from public, anon;
+revoke all on function public.admin_invite_office_staff(text, uuid) from public, anon;
+revoke all on function public.admin_list_office_staff() from public, anon;
+revoke all on function public.admin_revoke_office_staff(uuid) from public, anon;
+grant execute on function public.staff_my_offices() to authenticated;
+grant execute on function public.staff_list_issues() to authenticated;
+grant execute on function public.staff_add_reply(uuid, text, text, date) to authenticated;
+grant execute on function public.admin_invite_office_staff(text, uuid) to authenticated;
+grant execute on function public.admin_list_office_staff() to authenticated;
+grant execute on function public.admin_revoke_office_staff(uuid) to authenticated;
+
+-- CHECK (expect: false, true, false, true):
+--   select has_table_privilege('anon', 'office_staff', 'select'),
+--          has_function_privilege('authenticated', 'staff_list_issues()', 'execute'),
+--          has_function_privilege('anon', 'staff_list_issues()', 'execute'),
+--          has_function_privilege('authenticated', 'admin_invite_office_staff(text, uuid)', 'execute');
+
+-- ===================== 027_followup_queue.sql =====================
+-- 027: the follow-up list for moderators. Run after 021 (office replies). Safe to run twice. No new tables.
+-- It lists reports that were sent to an office and are still open, with what the moderator needs to decide whether to
+-- send a reminder or escalate: when it was sent, whether the office has replied, the date the office promised, and when
+-- we last reminded or escalated (read from the existing private contact log, contact_attempts).
+-- The app decides who is "due" (7 days with no reply, 30 days to escalate, a missed promised date); this function only gathers the facts.
+-- Moderators only. Contact details are private to moderators, like in admin_list_issues.
+
+create or replace function public.admin_followup_queue()
+returns table (
+  id uuid, category_id uuid, other_label text, party_id uuid, party_name text,
+  party_email text, party_phone text, party_whatsapp text,
+  severity text, description text, status text, confirmation_count int,
+  created_at timestamptz, sent_at timestamptz, lat double precision, lng double precision,
+  replies_count int, last_reply_at timestamptz, expected_date date,
+  reminders_count int, last_reminder_at timestamptz, last_escalation_at timestamptz)
+language plpgsql stable security definer set search_path = public, extensions as $$
+begin
+  perform assert_moderator();
+  return query
+  select i.id, i.category_id, i.other_label, i.party_id, p.name, p.email, p.phone, p.whatsapp,
+         i.severity::text, i.description, i.status::text, i.confirmation_count,
+         i.created_at, i.sent_at, st_y(i.location::geometry), st_x(i.location::geometry),
+         (select count(*)::int from office_replies r where r.issue_id = i.id and r.removed_at is null),
+         (select max(r.created_at) from office_replies r where r.issue_id = i.id and r.removed_at is null),
+         (select r.expected_date from office_replies r where r.issue_id = i.id and r.removed_at is null and r.kind = 'expected_date'
+           order by r.created_at desc limit 1),
+         (select count(*)::int from contact_attempts c where c.issue_id = i.id and c.note = 'Reminder sent'),
+         (select max(c.created_at) from contact_attempts c where c.issue_id = i.id and c.note = 'Reminder sent'),
+         (select max(c.created_at) from contact_attempts c where c.issue_id = i.id and c.note like 'Escalated%')
+    from issues i
+    join responsible_parties p on p.id = i.party_id
+   where i.status::text in ('sent', 'in_progress')
+     and i.duplicate_of is null
+   order by i.sent_at nulls last, i.created_at
+   limit 500;
+end $$;
+
+revoke all on function public.admin_followup_queue() from public, anon;
+grant execute on function public.admin_followup_queue() to authenticated;
+
+-- CHECK (expect: false, true):
+--   select has_function_privilege('anon', 'admin_followup_queue()', 'execute'),
+--          has_function_privilege('authenticated', 'admin_followup_queue()', 'execute');
+
+-- ===================== 028_moderator_tools.sql =====================
+-- 028: moderator tools. Run after 027. Safe to run twice.
+--   1. A record of who did what (moderator_log). It is written by database triggers, so every route is covered:
+--      the admin screen, a bulk action, or someone running SQL as a signed-in moderator. Nobody can edit or delete it from the app.
+--   2. Bulk actions: change status, assign an office, or dismiss flags on up to 50 reports at once. Each report is checked
+--      on its own (same rules as one at a time, e.g. "resolved" still needs an after photo) and the answer says which worked.
+--   3. admin_activity(): the record, newest first, for moderators only.
+-- Nothing here is visible to the public. Moderator emails are personal data, so the table is private.
+
+create table if not exists moderator_log (
+  id           bigint generated always as identity primary key,
+  moderator_id uuid not null,
+  action       text not null,
+  issue_id     uuid,
+  detail       jsonb not null default '{}'::jsonb,
+  created_at   timestamptz not null default now()
+);
+create index if not exists moderator_log_time_idx  on moderator_log (created_at desc);
+create index if not exists moderator_log_issue_idx on moderator_log (issue_id, created_at desc);
+alter table moderator_log enable row level security;           -- no policies: only the functions below touch it
+revoke all on moderator_log from anon, authenticated;
+
+-- Internal writer. Records only when the CURRENT user is a moderator (residents' own actions are not logged here).
+create or replace function public.log_moderator(p_action text, p_issue uuid, p_detail jsonb)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare v_batch text := nullif(current_setting('civicpulse.batch', true), '');
+begin
+  if auth.uid() is null or not is_moderator() then return; end if;
+  insert into moderator_log (moderator_id, action, issue_id, detail)
+  values (auth.uid(), p_action, p_issue,
+          coalesce(p_detail, '{}'::jsonb) || case when v_batch is null then '{}'::jsonb else jsonb_build_object('batch', v_batch) end);
+end $$;
+revoke all on function public.log_moderator(text, uuid, jsonb) from public, anon, authenticated;
+
+-- ---- triggers ----
+create or replace function public.trg_log_issue_change() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.status is distinct from old.status then
+    perform log_moderator('status', new.id, jsonb_build_object('from', old.status::text, 'to', new.status::text));
+  end if;
+  if new.party_id is distinct from old.party_id then
+    perform log_moderator('assign_office', new.id, jsonb_build_object('from', old.party_id, 'to', new.party_id));
+  end if;
+  if new.category_id is distinct from old.category_id then
+    perform log_moderator('category', new.id, jsonb_build_object('from', old.category_id, 'to', new.category_id));
+  end if;
+  return null;
+end $$;
+drop trigger if exists trg_log_issue_change on issues;
+create trigger trg_log_issue_change after update on issues for each row execute function trg_log_issue_change();
+
+create or replace function public.trg_log_flags_dismissed() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  perform log_moderator('dismiss_flags', old.issue_id, jsonb_build_object('reason', old.reason));
+  return null;
+end $$;
+drop trigger if exists trg_log_flags_dismissed on flags;
+create trigger trg_log_flags_dismissed after delete on flags for each row execute function trg_log_flags_dismissed();
+
+create or replace function public.trg_log_reply_hidden() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if old.removed_at is null and new.removed_at is not null then
+    perform log_moderator('hide_reply', new.issue_id, jsonb_build_object('reply', new.id));
+  end if;
+  return null;
+end $$;
+drop trigger if exists trg_log_reply_hidden on office_replies;
+create trigger trg_log_reply_hidden after update on office_replies for each row execute function trg_log_reply_hidden();
+
+create or replace function public.trg_log_staff_change() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    perform log_moderator('invite_staff', null, jsonb_build_object('party', new.party_id, 'email', new.email));
+  elsif old.revoked_at is null and new.revoked_at is not null then
+    perform log_moderator('revoke_staff', null, jsonb_build_object('party', new.party_id, 'email', new.email));
+  end if;
+  return null;
+end $$;
+drop trigger if exists trg_log_staff_change on office_staff;
+create trigger trg_log_staff_change after insert or update on office_staff for each row execute function trg_log_staff_change();
+
+-- ---- bulk actions ----
+-- Each report runs in its own sub-transaction, so one failure does not undo the others.
+create or replace function public.admin_bulk_set_status(p_ids uuid[], p_status issue_status, p_note text default null)
+returns table (issue_id uuid, ok boolean, error text)
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_id uuid;
+begin
+  perform assert_moderator();
+  if p_ids is null or coalesce(array_length(p_ids, 1), 0) = 0 then raise exception 'nothing_selected'; end if;
+  if array_length(p_ids, 1) > 50 then raise exception 'too_many'; end if;
+  perform set_config('civicpulse.batch', gen_random_uuid()::text, true);
+  for v_id in select distinct x from unnest(p_ids) x loop
+    begin
+      perform admin_set_status(v_id, p_status, p_note);
+      issue_id := v_id; ok := true; error := null; return next;
+    exception when others then
+      issue_id := v_id; ok := false; error := sqlerrm; return next;
+    end;
+  end loop;
+end $$;
+
+create or replace function public.admin_bulk_assign_party(p_ids uuid[], p_party uuid)
+returns table (issue_id uuid, ok boolean, error text)
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_id uuid;
+begin
+  perform assert_moderator();
+  if p_ids is null or coalesce(array_length(p_ids, 1), 0) = 0 then raise exception 'nothing_selected'; end if;
+  if array_length(p_ids, 1) > 50 then raise exception 'too_many'; end if;
+  if not exists (select 1 from responsible_parties where id = p_party) then raise exception 'party_not_found'; end if;
+  perform set_config('civicpulse.batch', gen_random_uuid()::text, true);
+  for v_id in select distinct x from unnest(p_ids) x loop
+    begin
+      if not exists (select 1 from issues where id = v_id) then raise exception 'not_found'; end if;
+      -- p_remember = false: a bulk choice must not teach the system a default for every category and region
+      perform admin_assign_party(v_id, p_party, false);
+      issue_id := v_id; ok := true; error := null; return next;
+    exception when others then
+      issue_id := v_id; ok := false; error := sqlerrm; return next;
+    end;
+  end loop;
+end $$;
+
+create or replace function public.admin_bulk_dismiss_flags(p_ids uuid[])
+returns table (issue_id uuid, ok boolean, error text)
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_id uuid;
+begin
+  perform assert_moderator();
+  if p_ids is null or coalesce(array_length(p_ids, 1), 0) = 0 then raise exception 'nothing_selected'; end if;
+  if array_length(p_ids, 1) > 50 then raise exception 'too_many'; end if;
+  perform set_config('civicpulse.batch', gen_random_uuid()::text, true);
+  for v_id in select distinct x from unnest(p_ids) x loop
+    begin
+      perform admin_dismiss_flags(v_id);
+      issue_id := v_id; ok := true; error := null; return next;
+    exception when others then
+      issue_id := v_id; ok := false; error := sqlerrm; return next;
+    end;
+  end loop;
+end $$;
+
+-- ---- the record ----
+create or replace function public.admin_activity(p_limit int default 100, p_issue uuid default null)
+returns table (id bigint, created_at timestamptz, moderator_email text, moderator_id uuid, action text, issue_id uuid, detail jsonb)
+language plpgsql stable security definer set search_path = public, auth as $$
+begin
+  perform assert_moderator();
+  return query
+    select l.id, l.created_at, u.email::text, l.moderator_id, l.action, l.issue_id, l.detail
+      from moderator_log l
+      left join auth.users u on u.id = l.moderator_id
+     where p_issue is null or l.issue_id = p_issue
+     order by l.id desc
+     limit least(greatest(coalesce(p_limit, 100), 1), 300);
+end $$;
+
+revoke all on function public.admin_bulk_set_status(uuid[], issue_status, text) from public, anon;
+revoke all on function public.admin_bulk_assign_party(uuid[], uuid) from public, anon;
+revoke all on function public.admin_bulk_dismiss_flags(uuid[]) from public, anon;
+revoke all on function public.admin_activity(int, uuid) from public, anon;
+grant execute on function public.admin_bulk_set_status(uuid[], issue_status, text) to authenticated;
+grant execute on function public.admin_bulk_assign_party(uuid[], uuid) to authenticated;
+grant execute on function public.admin_bulk_dismiss_flags(uuid[]) to authenticated;
+grant execute on function public.admin_activity(int, uuid) to authenticated;
+
+-- CHECK (expect: false, true, false, true):
+--   select has_table_privilege('authenticated', 'moderator_log', 'select'),
+--          has_function_privilege('authenticated', 'admin_activity(int, uuid)', 'execute'),
+--          has_function_privilege('anon', 'admin_bulk_set_status(uuid[], issue_status, text)', 'execute'),
+--          exists (select 1 from pg_trigger where tgname = 'trg_log_issue_change');
+
+-- ===================== 029_spam_checks.sql =====================
+-- 029: spam and fake-report checks. Run after 028. Safe to run twice. No cost, no new service.
+--   1. Reporting speed limit per account: at most 5 reports in 10 minutes and 10 in 24 hours (offline queues still fit).
+--   2. Location check: a report must be inside Ghana (a generous box), so a stray GPS fix or a made-up place is refused.
+--   3. Flag limit: one account can flag at most 20 reports in 24 hours, so "flag" cannot be used to attack honest reports.
+--   4. admin_spam_review(): a list of open reports that look suspicious and WHY. It only suggests. A moderator decides.
+--      Nothing is hidden or rejected automatically, so an honest report is never removed by a rule.
+-- Moderators and SQL-editor writes are never limited. An account that is not signed in cannot insert anyway.
+-- Honest limit: someone who can make unlimited fresh anonymous accounts can get round per-account limits. The real wall
+-- against that is the captcha on sign-in (Turnstile). These checks are the second layer.
+
+-- 1 + 2. Reports
+create or replace function public.check_report_abuse() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_lat double precision; v_lng double precision;
+begin
+  if auth.uid() is null or is_moderator() then return new; end if;
+  if new.reporter_id is not null then
+    if (select count(*) from issues where reporter_id = new.reporter_id and created_at > now() - interval '10 minutes') >= 5      -- LIMIT: per 10 minutes
+       or (select count(*) from issues where reporter_id = new.reporter_id and created_at > now() - interval '24 hours') >= 10 then -- LIMIT: per 24 hours
+      raise exception 'report_rate_limited' using errcode = 'CP001';
+    end if;
+  end if;
+  v_lat := st_y(new.location::geometry); v_lng := st_x(new.location::geometry);
+  if v_lat is null or v_lng is null or v_lat not between 4.5 and 11.3 or v_lng not between -3.4 and 1.3 then   -- Ghana, with room at the edges
+    raise exception 'outside_ghana' using errcode = 'CP002';
+  end if;
+  return new;
+end $$;
+drop trigger if exists issues_abuse_check on issues;
+create trigger issues_abuse_check before insert on issues for each row execute function check_report_abuse();
+
+-- 3. Flags
+create or replace function public.check_flag_abuse() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or is_moderator() then return new; end if;
+  if (select count(*) from flags where user_id = new.user_id and created_at > now() - interval '24 hours') >= 20 then   -- LIMIT: per 24 hours
+    raise exception 'flag_rate_limited' using errcode = 'CP003';
+  end if;
+  return new;
+end $$;
+drop trigger if exists flags_abuse_check on flags;
+create trigger flags_abuse_check before insert on flags for each row execute function check_flag_abuse();
+
+-- 4. The review list. Reasons: flagged (2+ flags), burst (3+ reports from one account within a day of this one),
+-- same_text (the same words appear in another report), link (a web address in the text), number (a long phone-like number in the text),
+-- new_account (the account was under 10 minutes old when it reported). A report is listed at 2 points or more.
+create or replace function public.admin_spam_review()
+returns table (issue_id uuid, score int, reasons text[])
+language plpgsql stable security definer set search_path = public, auth as $$
+begin
+  perform assert_moderator();
+  return query
+  with base as (
+    select i.id, i.reporter_id, i.created_at,
+           lower(regexp_replace(btrim(coalesce(i.description, '')), '\s+', ' ', 'g')) as norm,
+           coalesce(i.description, '') as raw
+      from issues i
+     where i.duplicate_of is null and i.status::text not in ('resolved', 'rejected')
+  ), sig as (
+    select b.id,
+      (select count(*) from flags f where f.issue_id = b.id) >= 2 as flagged,
+      b.reporter_id is not null and (select count(*) from issues o where o.reporter_id = b.reporter_id
+          and o.created_at between b.created_at - interval '1 day' and b.created_at + interval '1 day') >= 3 as burst,
+      char_length(b.norm) >= 12 and exists (select 1 from issues o where o.id <> b.id
+          and lower(regexp_replace(btrim(coalesce(o.description, '')), '\s+', ' ', 'g')) = b.norm
+          and o.created_at between b.created_at - interval '30 days' and b.created_at + interval '30 days') as same_text,
+      b.raw ~* '(https?://|www\.)' as link,
+      b.raw ~ '(\d[\s-]?){9,}' as number,
+      coalesce((select b.created_at - u.created_at < interval '10 minutes' from auth.users u where u.id = b.reporter_id), false) as new_account
+    from base b
+  ), scored as (
+    select s.id,
+           (case when s.flagged then 2 else 0 end + case when s.burst then 2 else 0 end + case when s.same_text then 2 else 0 end
+            + case when s.link then 2 else 0 end + case when s.number then 1 else 0 end + case when s.new_account then 1 else 0 end)::int as score,
+           array_remove(array[case when s.flagged then 'flagged' end, case when s.burst then 'burst' end, case when s.same_text then 'same_text' end,
+                              case when s.link then 'link' end, case when s.number then 'number' end, case when s.new_account then 'new_account' end], null) as reasons
+      from sig s
+  )
+  select sc.id, sc.score, sc.reasons from scored sc where sc.score >= 2 order by sc.score desc, sc.id limit 300;
+end $$;
+
+revoke all on function public.admin_spam_review() from public, anon;
+grant execute on function public.admin_spam_review() to authenticated;
+
+-- CHECK (expect: true, true, false): both triggers exist, and anonymous people cannot call the review list.
+--   select exists (select 1 from pg_trigger where tgname = 'issues_abuse_check') and exists (select 1 from pg_trigger where tgname = 'flags_abuse_check'),
+--          has_function_privilege('authenticated', 'admin_spam_review()', 'execute'),
+--          has_function_privilege('anon', 'admin_spam_review()', 'execute');
+
+-- ===================== 030_error_log.sql =====================
+-- 030: error log. Run after 029. Safe to run twice. Free: no outside service, nothing to install.
+-- When the app breaks on someone's phone, the page sends a short, cleaned-up note here, and moderators see it in the Errors tab.
+--   * One row per kind of error (a fingerprint), with a count and first/last time, so one bug seen 500 times is one line.
+--   * No user id, no IP address, no full web address (the path only, never the part after ?). Emails, long numbers and
+--     long codes inside messages are blanked before saving. Rows older than 60 days are deleted.
+--   * Anyone can send a note (the app must be able to report even when nobody is signed in), but only 100 new kinds of error per hour are accepted overall, and each text is cut short, so it cannot fill the database.
+--   * Only moderators can read or mark them fixed. The table is private.
+
+create table if not exists client_errors (
+  id          uuid primary key default gen_random_uuid(),
+  fingerprint text not null unique,
+  kind        text not null check (kind in ('render', 'script', 'promise', 'report')),
+  path        text,
+  message     text not null,
+  stack       text,
+  agent       text,
+  count       int  not null default 1,
+  first_seen  timestamptz not null default now(),
+  last_seen   timestamptz not null default now(),
+  resolved_at timestamptz,
+  resolved_by uuid
+);
+create index if not exists client_errors_seen_idx on client_errors (last_seen desc);
+alter table client_errors enable row level security;
+revoke all on client_errors from anon, authenticated;
+
+-- Blank out anything personal that could be inside an error message.
+create or replace function public.scrub_error_text(p text, p_max int)
+returns text language sql immutable as $$
+  select left(
+    regexp_replace(
+      regexp_replace(
+        regexp_replace(
+          regexp_replace(coalesce(p, ''), '[^\s@<>"'']+@[^\s@<>"'']+\.[^\s@<>"'']+', '[email]', 'g'),   -- emails
+          '[A-Za-z0-9_\-\.=]{32,}', '[token]', 'g'),                                                     -- long codes and tokens
+        '\d[\d\s\-]{7,}\d', '[number]', 'g'),                                                           -- phone-like numbers
+      '\?[^\s)"'']*', '', 'g'),                                                                         -- anything after a ? in a web address
+    p_max);
+$$;
+
+create or replace function public.log_client_error(p_kind text, p_path text, p_message text, p_stack text default null, p_agent text default null)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare v_msg text := scrub_error_text(p_message, 300); v_stack text := scrub_error_text(p_stack, 800);
+        v_path text := left(split_part(coalesce(p_path, ''), '?', 1), 200); v_fp text;
+begin
+  if p_kind is null or p_kind not in ('render', 'script', 'promise', 'report') or btrim(v_msg) = '' then return; end if;
+  v_fp := md5(p_kind || '|' || v_msg || '|' || left(split_part(v_stack, E'\n', 2), 160));
+  update client_errors set count = count + 1, last_seen = now(),
+         resolved_at = case when resolved_at is not null and resolved_at < now() - interval '1 hour' then null else resolved_at end   -- seen again after "fixed": reopen
+   where fingerprint = v_fp;
+  if found then return; end if;
+  if (select count(*) from client_errors where first_seen > now() - interval '1 hour') >= 100 then return; end if;   -- LIMIT: new kinds per hour, overall
+  delete from client_errors where last_seen < now() - interval '60 days';
+  insert into client_errors (fingerprint, kind, path, message, stack, agent)
+  values (v_fp, p_kind, nullif(v_path, ''), v_msg, nullif(v_stack, ''), nullif(left(coalesce(p_agent, ''), 120), ''))
+  on conflict (fingerprint) do update set count = client_errors.count + 1, last_seen = now();
+end $$;
+
+create or replace function public.admin_list_errors(p_include_fixed boolean default false)
+returns table (id uuid, kind text, path text, message text, stack text, agent text, count int, first_seen timestamptz, last_seen timestamptz, resolved_at timestamptz)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  perform assert_moderator();
+  return query
+    select e.id, e.kind, e.path, e.message, e.stack, e.agent, e.count, e.first_seen, e.last_seen, e.resolved_at
+      from client_errors e
+     where p_include_fixed or e.resolved_at is null
+     order by e.last_seen desc
+     limit 200;
+end $$;
+
+create or replace function public.admin_resolve_error(p_id uuid, p_fixed boolean default true)
+returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform assert_moderator();
+  update client_errors set resolved_at = case when p_fixed then now() else null end, resolved_by = case when p_fixed then auth.uid() else null end where id = p_id;
+end $$;
+
+revoke all on function public.scrub_error_text(text, int) from public, anon, authenticated;
+revoke all on function public.log_client_error(text, text, text, text, text) from public;
+revoke all on function public.admin_list_errors(boolean) from public, anon;
+revoke all on function public.admin_resolve_error(uuid, boolean) from public, anon;
+grant execute on function public.log_client_error(text, text, text, text, text) to anon, authenticated;
+grant execute on function public.admin_list_errors(boolean) to authenticated;
+grant execute on function public.admin_resolve_error(uuid, boolean) to authenticated;
+
+-- CHECK (expect: false, true, false, true):
+--   select has_table_privilege('anon', 'client_errors', 'select'),
+--          has_function_privilege('anon', 'log_client_error(text, text, text, text, text)', 'execute'),
+--          has_function_privilege('anon', 'admin_list_errors(boolean)', 'execute'),
+--          has_function_privilege('authenticated', 'admin_list_errors(boolean)', 'execute');

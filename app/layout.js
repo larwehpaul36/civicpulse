@@ -1,6 +1,7 @@
 import './globals.css';
 import Nav from '@/components/Nav';
 import SyncBanner from '@/components/SyncBanner';
+import ErrorReporter from '@/components/ErrorReporter';
 import PhoneVerifyProvider from '@/components/PhoneVerify';
 import LangProvider from '@/components/LangProvider';
 import SiteFooter from '@/components/SiteFooter';
@@ -26,6 +27,7 @@ export default function RootLayout({ children }) {
       <head><script dangerouslySetInnerHTML={{ __html: INIT_SCRIPT }} /></head>
       <body>
         <LangProvider>
+          <ErrorReporter />
           <a className="skip" href="#main">{s.a11y.skip}</a>
           <PhoneVerifyProvider>
             <Nav />

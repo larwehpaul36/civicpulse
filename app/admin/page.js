@@ -11,6 +11,7 @@ import AdminSuggestion from '@/components/AdminSuggestion';
 import AdminOfficeStaff from '@/components/AdminOfficeStaff';
 import AdminFollowUp from '@/components/AdminFollowUp';
 import AdminActivity from '@/components/AdminActivity';
+import AdminErrors from '@/components/AdminErrors';
 import AdminBulkBar from '@/components/AdminBulkBar';
 import { BULK_MAX, keepVisible, selectShown, toggleId } from '@/lib/moderatorTools';
 import { followUpList } from '@/lib/followUp';
@@ -111,6 +112,8 @@ export default function AdminPage() {
   const [links, setLinks] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [queue, setQueue] = useState([]);
+  const [errors, setErrors] = useState([]);
+  const [errorsMissing, setErrorsMissing] = useState(false);
   const [regions, setRegions] = useState([]);
   const [view, setView] = useState('needs');
   const [picked, setPicked] = useState([]);       // ticked reports for the bulk bar
@@ -127,7 +130,7 @@ export default function AdminPage() {
   useEffect(() => { setMyId(session?.user?.id ?? null); }, [session]);
 
   const refresh = useCallback(async () => {
-    const [i, c, p, r, l, sg, fx, fq, sp] = await Promise.all([
+    const [i, c, p, r, l, sg, fx, fq, sp, er] = await Promise.all([
       supabase.rpc('admin_list_issues'),
       supabase.from('categories').select('id, name'),
       supabase.from('responsible_parties').select('id, name, region_id').eq('verified', true).order('name'),
@@ -137,8 +140,9 @@ export default function AdminPage() {
       supabase.rpc('admin_fix_check_summary'),  // empty until 019 and 020 have been run
       supabase.rpc('admin_followup_queue'),     // empty until 027 has been run
       supabase.rpc('admin_spam_review'),        // empty until 029 has been run
+      supabase.rpc('admin_list_errors', { p_include_fixed: true }), // empty until 030 has been run
     ]);
-    setIssues(mergeSpam(mergeFixChecks(i.data ?? [], fx.data), sp.data)); setCats(c.data ?? []); setParties(p.data ?? []); setRegions(r.data ?? []); setLinks(l.data ?? []); setSuggestions(Array.isArray(sg.data) ? sg.data : []); setQueue(Array.isArray(fq.data) ? fq.data : []);
+    setErrors(Array.isArray(er.data) ? er.data : []); setErrorsMissing(!!er.error); setIssues(mergeSpam(mergeFixChecks(i.data ?? [], fx.data), sp.data)); setCats(c.data ?? []); setParties(p.data ?? []); setRegions(r.data ?? []); setLinks(l.data ?? []); setSuggestions(Array.isArray(sg.data) ? sg.data : []); setQueue(Array.isArray(fq.data) ? fq.data : []);
   }, []);
 
   useEffect(() => {
@@ -155,8 +159,8 @@ export default function AdminPage() {
   }, [regions]);
   const catName = useMemo(() => Object.fromEntries(cats.map((c) => [c.id, label(c.name)])), [cats]);
   const counts = useMemo(
-    () => ({ ...Object.fromEntries(Object.entries(VIEWS).map(([k, fn]) => [k, issues.filter(fn).length])), directory: suggestions.length, followup: followUpList(queue).length }),
-    [issues, suggestions, queue]
+    () => ({ ...Object.fromEntries(Object.entries(VIEWS).map(([k, fn]) => [k, issues.filter(fn).length])), directory: suggestions.length, followup: followUpList(queue).length, errors: errors.filter((x) => !x.resolved_at).length }),
+    [issues, suggestions, queue, errors]
   );
   const shown = useMemo(
     () =>
@@ -194,7 +198,7 @@ export default function AdminPage() {
       {signedIn && role === 'yes' && (
         <>
           <div className="tabs" role="tablist">
-            {[...Object.keys(VIEWS), 'followup', 'promises', 'directory', 'staff', 'activity'].map((k) => (
+            {[...Object.keys(VIEWS), 'followup', 'promises', 'directory', 'staff', 'activity', 'errors'].map((k) => (
               <button key={k} type="button" role="tab" aria-selected={view === k}
                 className={view === k ? 'tab on' : 'tab'} onClick={() => { setView(k); clearPicks(); }}>
                 {A.views[k]}{counts[k] === undefined ? '' : ` (${counts[k]})`}
@@ -206,6 +210,8 @@ export default function AdminPage() {
             <PromiseStats rows={issues} names={Object.fromEntries(parties.map((x) => [x.id, x.name]))} />
           ) : view === 'followup' ? (
             <AdminFollowUp rows={queue} categoryNames={catName} parties={parties} onChanged={refresh} />
+          ) : view === 'errors' ? (
+            <AdminErrors rows={errors} missing={errorsMissing} onChanged={refresh} />
           ) : view === 'activity' ? (
             <AdminActivity parties={parties} categoryNames={catName} myId={myId} />
           ) : view === 'staff' ? (
