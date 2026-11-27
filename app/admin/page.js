@@ -9,6 +9,8 @@ import AdminIssue from '@/components/AdminIssue';
 import PromiseStats from '@/components/PromiseStats';
 import AdminSuggestion from '@/components/AdminSuggestion';
 import AdminOfficeStaff from '@/components/AdminOfficeStaff';
+import AdminFollowUp from '@/components/AdminFollowUp';
+import { followUpList } from '@/lib/followUp';
 import { isDisputed, mergeFixChecks } from '@/lib/adminFix';
 
 const A = s.admin;
@@ -103,6 +105,7 @@ export default function AdminPage() {
   const [parties, setParties] = useState([]);
   const [links, setLinks] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
+  const [queue, setQueue] = useState([]);
   const [regions, setRegions] = useState([]);
   const [view, setView] = useState('needs');
 
@@ -115,7 +118,7 @@ export default function AdminPage() {
   const signedIn = session && !session.user.is_anonymous;
 
   const refresh = useCallback(async () => {
-    const [i, c, p, r, l, sg, fx] = await Promise.all([
+    const [i, c, p, r, l, sg, fx, fq] = await Promise.all([
       supabase.rpc('admin_list_issues'),
       supabase.from('categories').select('id, name'),
       supabase.from('responsible_parties').select('id, name, region_id').eq('verified', true).order('name'),
@@ -123,8 +126,9 @@ export default function AdminPage() {
       supabase.from('issue_links').select('issue_a, issue_b, relation'),
       supabase.rpc('admin_list_suggestions'),   // empty until 008 has been run
       supabase.rpc('admin_fix_check_summary'),  // empty until 019 and 020 have been run
+      supabase.rpc('admin_followup_queue'),     // empty until 027 has been run
     ]);
-    setIssues(mergeFixChecks(i.data ?? [], fx.data)); setCats(c.data ?? []); setParties(p.data ?? []); setRegions(r.data ?? []); setLinks(l.data ?? []); setSuggestions(Array.isArray(sg.data) ? sg.data : []);
+    setIssues(mergeFixChecks(i.data ?? [], fx.data)); setCats(c.data ?? []); setParties(p.data ?? []); setRegions(r.data ?? []); setLinks(l.data ?? []); setSuggestions(Array.isArray(sg.data) ? sg.data : []); setQueue(Array.isArray(fq.data) ? fq.data : []);
   }, []);
 
   useEffect(() => {
@@ -141,8 +145,8 @@ export default function AdminPage() {
   }, [regions]);
   const catName = useMemo(() => Object.fromEntries(cats.map((c) => [c.id, label(c.name)])), [cats]);
   const counts = useMemo(
-    () => ({ ...Object.fromEntries(Object.entries(VIEWS).map(([k, fn]) => [k, issues.filter(fn).length])), directory: suggestions.length }),
-    [issues, suggestions]
+    () => ({ ...Object.fromEntries(Object.entries(VIEWS).map(([k, fn]) => [k, issues.filter(fn).length])), directory: suggestions.length, followup: followUpList(queue).length }),
+    [issues, suggestions, queue]
   );
   const shown = useMemo(
     () =>
@@ -173,7 +177,8 @@ export default function AdminPage() {
       {signedIn && role === 'yes' && (
         <>
           <div className="tabs" role="tablist">
-            {[...Object.keys(VIEWS), 'promises', 'directory', 'staff'].map((k) => (
+            {[...Object.keys(VIEWS), 'followup', 'promises', 'directory', 'staff'].map((k) => (
+
               <button key={k} type="button" role="tab" aria-selected={view === k}
                 className={view === k ? 'tab on' : 'tab'} onClick={() => setView(k)}>
                 {A.views[k]}{counts[k] === undefined ? '' : ` (${counts[k]})`}
@@ -183,6 +188,9 @@ export default function AdminPage() {
 
           {view === 'promises' ? (
             <PromiseStats rows={issues} names={Object.fromEntries(parties.map((x) => [x.id, x.name]))} />
+          ) : view === 'followup' ? (
+            <AdminFollowUp rows={queue} categoryNames={catName} parties={parties} onChanged={refresh} />
+
           ) : view === 'staff' ? (
             <AdminOfficeStaff parties={parties} />
           ) : view === 'directory' ? (
