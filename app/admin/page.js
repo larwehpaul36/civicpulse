@@ -15,6 +15,7 @@ import AdminBulkBar from '@/components/AdminBulkBar';
 import { BULK_MAX, keepVisible, selectShown, toggleId } from '@/lib/moderatorTools';
 import { followUpList } from '@/lib/followUp';
 import { isDisputed, mergeFixChecks } from '@/lib/adminFix';
+import { isSuspicious, mergeSpam } from '@/lib/spamSignals';
 
 const A = s.admin;
 const RANK = { hazard: 0, high: 1, medium: 2, low: 3 };
@@ -25,6 +26,7 @@ const VIEWS = {
   resolved: (i) => i.status === 'resolved',
   rejected: (i) => i.status === 'rejected',
   disputed: isDisputed,
+  suspicious: isSuspicious,
 };
 
 function SignIn() {
@@ -125,7 +127,7 @@ export default function AdminPage() {
   useEffect(() => { setMyId(session?.user?.id ?? null); }, [session]);
 
   const refresh = useCallback(async () => {
-    const [i, c, p, r, l, sg, fx, fq] = await Promise.all([
+    const [i, c, p, r, l, sg, fx, fq, sp] = await Promise.all([
       supabase.rpc('admin_list_issues'),
       supabase.from('categories').select('id, name'),
       supabase.from('responsible_parties').select('id, name, region_id').eq('verified', true).order('name'),
@@ -134,8 +136,9 @@ export default function AdminPage() {
       supabase.rpc('admin_list_suggestions'),   // empty until 008 has been run
       supabase.rpc('admin_fix_check_summary'),  // empty until 019 and 020 have been run
       supabase.rpc('admin_followup_queue'),     // empty until 027 has been run
+      supabase.rpc('admin_spam_review'),        // empty until 029 has been run
     ]);
-    setIssues(mergeFixChecks(i.data ?? [], fx.data)); setCats(c.data ?? []); setParties(p.data ?? []); setRegions(r.data ?? []); setLinks(l.data ?? []); setSuggestions(Array.isArray(sg.data) ? sg.data : []); setQueue(Array.isArray(fq.data) ? fq.data : []);
+    setIssues(mergeSpam(mergeFixChecks(i.data ?? [], fx.data), sp.data)); setCats(c.data ?? []); setParties(p.data ?? []); setRegions(r.data ?? []); setLinks(l.data ?? []); setSuggestions(Array.isArray(sg.data) ? sg.data : []); setQueue(Array.isArray(fq.data) ? fq.data : []);
   }, []);
 
   useEffect(() => {
@@ -218,7 +221,8 @@ export default function AdminPage() {
             </>
           ) : (
             <>
-          {shown.length === 0 && <p>{A.none}</p>}
+          {view === 'suspicious' && <p className="hint">{A.spam.intro} {A.spam.hint}</p>}
+          {shown.length === 0 && <p>{view === 'suspicious' ? A.spam.none : A.none}</p>}
           {shown.length > 1 && (
             <p className="cta-row">
               <button type="button" className="secondary" onClick={pickAll}>{A.bulk.selectAll}</button>

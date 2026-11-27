@@ -14,6 +14,7 @@ import { useVerify } from '@/components/PhoneVerify';
 import { needsPhone } from '@/lib/verifyFlow';
 import { getPosition, sendConfirmation } from '@/lib/confirmations';
 import { categoryTitle } from '@/lib/categoryTitle';
+import { abuseKey } from '@/lib/spamSignals';
 
 const photoUrl = (path) => supabase.storage.from('issue-photos').getPublicUrl(path).data.publicUrl;
 const dateText = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -76,7 +77,7 @@ export default function IssuePage() {
     try {
       const user = await ensureUser();
       const { error } = await supabase.from('flags').insert({ issue_id: id, user_id: user.id, reason: 'false_or_spam' });
-      setMsg(error && error.code !== '23505' ? s.failed : s.flagged);
+      setMsg(error && error.code !== '23505' ? (abuseKey(error) === 'flagRate' ? s.spam.errors.flagRate : s.failed) : s.flagged);
     } catch { setMsg(s.failed); }
   }
 
