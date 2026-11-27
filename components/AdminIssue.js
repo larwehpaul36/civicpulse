@@ -157,6 +157,12 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
 
         <div className="admin-body">
           {i.description && <p>{i.description}</p>}
+          {i.spam_reasons?.length > 0 && (
+            <div className="warn">
+              <strong>{A.spam.title}</strong>
+              <ul>{i.spam_reasons.map((r) => <li key={r}>{A.spam.reasons[r] ?? r}</li>)}</ul>
+            </div>
+          )}
           {(i.fix_fixed + i.fix_partly + i.fix_not > 0 || i.reopen_count > 0) && (
             <p className="warn">
               {i.fix_fixed + i.fix_partly + i.fix_not > 0 && <>{A.fixLine(i.fix_fixed, i.fix_partly, i.fix_not)} </>}
