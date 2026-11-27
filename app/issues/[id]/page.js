@@ -106,7 +106,7 @@ export default function IssuePage() {
       <p><strong>{s.responsibleParty}:</strong> {party?.name ?? s.notAssigned}</p>
       {waiting !== null && <p className="warn">{s.sentAgo(waiting)}</p>}
       {needsEmergencyNotice(issue.severity, issue.status) && <EmergencyNotice compact />}
-      <ShareButton title={categoryTitle(label(cat?.name), issue.other_label)} text={s.share.line(categoryTitle(label(cat?.name), issue.other_label), issue.status, issue.days_open)} />
+      <ShareButton cardPath={`/issues/${issue.id}/card`} title={categoryTitle(label(cat?.name), issue.other_label)} text={s.share.line(categoryTitle(label(cat?.name), issue.other_label), issue.status, issue.days_open)} />
 
       <div className="photos">
         <figure>
