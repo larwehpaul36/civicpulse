@@ -8,7 +8,7 @@ waiting_for_reply, longest_wait_days.
 - A reply is any public reply kind: answer, expected date, or "not ours". Hidden replies are excluded by the database.
 - Fixed cases with no reply are neither "replied" nor "waiting".
 - If 021 has not been run, the reply block and the "Fastest to reply" sort are hidden, and the CSV columns are blank (never zero).
-- Offices do not sign in yet: a moderator records replies, so "waiting" can mean "not heard or not recorded". The page says so.
+- Offices can now reply on their own page (build 7) or by private link, and a moderator records replies passed on by WhatsApp, a call or a visit, so "waiting" can still mean "not heard or not recorded". The page says so.
 - Offices with fewer than 3 cases keep the existing "Early data" chip.
 - Rules are pure functions in lib/trackerStats.js (firstReplies, replyDays, partyStats third argument, sort "reply"), tested in
   tests/trackerStats.test.mjs and tests/openData.test.mjs.

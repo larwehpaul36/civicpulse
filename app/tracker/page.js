@@ -6,7 +6,7 @@ import { fetchAll } from '@/lib/fetchAll';
 import { label } from '@/lib/i18n';
 import { strings as s } from '@/lib/strings';
 import PromiseStats from '@/components/PromiseStats';
-import { summarize, partyStats, sortParties, weeklyTrend, firstReplies } from '@/lib/trackerStats';
+import { summarize, partyStats, sortParties, weeklyTrend, firstReplies, waitingList } from '@/lib/trackerStats';
 
 const T = s.tracker2;
 const fmtDate = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -44,7 +44,23 @@ function Spark({ data }) {
   return <svg className="spark" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={T.fixesPerWeek}><polyline points={pts} /></svg>;
 }
 
-function PartyCard({ p, name }) {
+function WaitList({ items, catNames, partyNames, showParty, total }) {
+  return (
+    <>
+      <ul className="waitlist">
+        {items.map((x) => (
+          <li key={x.id}>
+            <Link href={`/issues/${x.id}`}>{catNames[x.category_id] || T.reportWord}{showParty && <> · {partyNames[x.party_id] ?? '—'}</>}</Link>
+            <span className="days">{T.waitingDays(x.days)}</span>
+          </li>
+        ))}
+      </ul>
+      {total > items.length && <p className="hint">{T.moreWaiting(total - items.length)}</p>}
+    </>
+  );
+}
+
+function PartyCard({ p, name, list, catNames }) {
   return (
     <article className="pcard">
       <header>
@@ -68,6 +84,12 @@ function PartyCard({ p, name }) {
             <div className="m"><b>{p.oldestWaiting === null ? '—' : T.days(p.oldestWaiting)}</b><span>{T.longestWait}</span></div>
           </div>
         </div>
+      )}
+      {list && list.items.length > 0 && (
+        <details>
+          <summary>{T.seeWaiting(list.total)}</summary>
+          <WaitList items={list.items} catNames={catNames} partyNames={{}} showParty={false} total={list.total} />
+        </details>
       )}
       <div className="rate" aria-hidden="true"><i style={{ width: `${p.rate}%` }} /></div>
       <div className="sparkrow"><Spark data={p.spark} /><span className="hint">{T.fixesPerWeek}</span></div>
@@ -103,6 +125,10 @@ export default function TrackerPage() {
   const first = data ? data.first : null;
   const parties = useMemo(() => sortParties(partyStats(rows, now, first), sort), [rows, sort, now, first]);
   const trend = useMemo(() => weeklyTrend(rows, now, 12), [rows, now]);
+  const catNames = useMemo(() => Object.fromEntries((data?.cats ?? []).map((c) => [c.id, label(c.name)])), [data]);
+  const allWaiting = useMemo(() => waitingList(rows, first, now, { limit: 100000 }), [rows, first, now]);
+  const longest = allWaiting.slice(0, 10);
+  const listFor = (id) => { const mine = allWaiting.filter((x) => x.party_id === id); return { items: mine.slice(0, 5), total: mine.length }; };
   const usedCats = data ? data.cats.filter((c) => data.rows.some((r) => r.category_id === c.id)) : [];
   const tiles = [kpi.filed, kpi.sent, kpi.resolved, kpi.median === null ? '—' : T.days(kpi.median)];
 
@@ -133,6 +159,15 @@ export default function TrackerPage() {
             <TrendChart trend={trend} />
           </section>
 
+          {first && (
+            <section className="card" aria-labelledby="waiting-longest">
+              <h2 id="waiting-longest">{T.longestTitle}</h2>
+              <p className="hint">{T.longestIntro}</p>
+              {longest.length === 0 ? <p>{T.noneWaiting}</p> : <WaitList items={longest} catNames={catNames} partyNames={data.names} showParty total={allWaiting.length} />}
+              <p className="hint">{T.waitNote}</p>
+            </section>
+          )}
+
           <h2>{s.party}</h2>
           {parties.length === 0 ? <p>{s.trackerEmpty}</p> : (
             <>
@@ -141,7 +176,7 @@ export default function TrackerPage() {
                   <button key={k} type="button" className={`tab${sort === k ? ' on' : ''}`} aria-pressed={sort === k} onClick={() => setSort(k)}>{v}</button>
                 ))}
               </div>
-              <div className="pcards">{parties.map((p) => <PartyCard key={p.id} p={p} name={data.names[p.id] ?? '—'} />)}</div>
+              <div className="pcards">{parties.map((p) => <PartyCard key={p.id} p={p} name={data.names[p.id] ?? '—'} list={first ? listFor(p.id) : null} catNames={catNames} />)}</div>
             </>
           )}
 

@@ -323,3 +323,10 @@ body { min-height:100dvh; }
 .admin-card select, .admin-card input { max-width:100%; }
 input[type=search] { appearance:none; -webkit-appearance:none; }
 input[type=search]::-webkit-search-cancel-button { cursor:pointer; }
+
+/* Reports waiting longest for an office reply (tracker) */
+.waitlist { list-style:none; margin:.6rem 0; padding:0; display:grid; gap:.5rem; }
+.waitlist li { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:.2rem .8rem; padding:.7rem .9rem; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
+.waitlist a { font-weight:700; min-width:0; overflow-wrap:anywhere; }
+.waitlist .days { font-weight:800; color:var(--ink); white-space:nowrap; }
+.pcard details { border-top:1px solid var(--line); padding-top:.6rem; } .pcard details summary { font-weight:700; cursor:pointer; min-height:44px; display:flex; align-items:center; }

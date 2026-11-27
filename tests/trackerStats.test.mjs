@@ -86,3 +86,52 @@ test('sort by reply: fastest first, offices that never replied last, longest sil
   const ids = sortParties(partyStats(rows, NOW, first), 'reply').map((p) => p.id);
   assert.deepEqual(ids, ['quick', 'slow', 'mute2', 'mute']);
 });
+
+// ---- waitingList: the reports waiting longest for any word from their office ----
+import { waitingList } from '../lib/trackerStats.js';
+{
+  const DAYMS = 86400000, now = Date.parse('2026-11-25T12:00:00Z');
+  const ago = (d) => new Date(now - d * DAYMS).toISOString();
+  const row = (id, o = {}) => ({ id, status: 'sent', party_id: 'p1', category_id: 'c1', sent_at: ago(10), resolved_at: null, ...o });
+  const none = new Map();
+
+  test('waitingList: longest wait first, and only reports with no reply, still open and with an office', () => {
+    const rows = [row('a', { sent_at: ago(5) }), row('b', { sent_at: ago(40) }), row('c', { sent_at: ago(20) }),
+      row('replied', { sent_at: ago(90) }), row('fixed', { status: 'resolved', sent_at: ago(80), resolved_at: ago(2) }),
+      row('rejected', { status: 'rejected', sent_at: ago(70) }), row('unsent', { sent_at: null }), row('noparty', { party_id: null, sent_at: ago(60) })];
+    const first = new Map([['replied', now - 3 * DAYMS]]);
+    assert.deepEqual(waitingList(rows, first, now).map((x) => [x.id, x.days]), [['b', 40], ['c', 20], ['a', 5]]);
+    assert.equal(waitingList(rows, none, now).length, 7 - 3 + 0, 'with an empty reply map, everything sent and open is waiting');
+  });
+
+  test('waitingList says nothing when replies cannot be read (migration 021 not run)', () => {
+    assert.deepEqual(waitingList([row('a')], null, now), []);
+    assert.deepEqual(waitingList(null, none, now), []);
+  });
+
+  test('waitingList: one office, a limit, and a steady order for equal waits', () => {
+    const rows = [row('z', { sent_at: ago(9) }), row('y', { sent_at: ago(9) }), row('x', { sent_at: ago(9) }), row('o', { party_id: 'p2', sent_at: ago(50) })];
+    assert.deepEqual(waitingList(rows, none, now, { partyId: 'p1' }).map((x) => x.id), ['x', 'y', 'z']);
+    assert.deepEqual(waitingList(rows, none, now, { partyId: 'p1', limit: 2 }).map((x) => x.id), ['x', 'y']);
+    assert.deepEqual(waitingList(rows, none, now, { partyId: 'p2' }).map((x) => x.id), ['o']);
+    assert.deepEqual(waitingList(rows, none, now, { partyId: 'nobody' }), []);
+    assert.equal(waitingList(rows, none, now, { limit: 100000 }).length, 4);
+  });
+
+  test('waitingList: a bad date never makes a wrong list, and a future send date is zero days', () => {
+    assert.deepEqual(waitingList([row('a', { sent_at: 'garbage' })], none, now), []);
+    assert.equal(waitingList([row('a', { sent_at: new Date(now + DAYMS).toISOString() })], none, now)[0].days, 0);
+  });
+
+  test('the tracker page shows the list only when replies could be read, and keeps its honest note', async () => {
+    const { readFileSync } = await import('node:fs');
+    const page = readFileSync(new URL('../app/tracker/page.js', import.meta.url), 'utf8');
+    assert.ok(/\{first && \(\s*<section className="card" aria-labelledby="waiting-longest">/.test(page));
+    assert.ok(/list=\{first \? listFor\(p\.id\) : null\}/.test(page));
+    const { strings } = await import('../lib/strings.js');
+    assert.ok(strings.tracker2.waitNote.includes('still show here'));
+    assert.ok(!strings.tracker2.how.join(' ').includes('do not sign in'), 'the old "offices do not sign in" line is gone');
+    assert.equal(strings.tracker2.waitingDays(1), 'Waiting 1 day');
+    assert.equal(strings.tracker2.waitingDays(12), 'Waiting 12 days');
+  });
+}
