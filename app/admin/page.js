@@ -178,7 +178,6 @@ export default function AdminPage() {
         <>
           <div className="tabs" role="tablist">
             {[...Object.keys(VIEWS), 'followup', 'promises', 'directory', 'staff'].map((k) => (
-            {[...Object.keys(VIEWS), 'promises', 'directory', 'staff'].map((k) => (
 
               <button key={k} type="button" role="tab" aria-selected={view === k}
                 className={view === k ? 'tab on' : 'tab'} onClick={() => setView(k)}>
