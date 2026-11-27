@@ -24,7 +24,7 @@ async function rpc(name, args) {
   if (error) throw error;
 }
 
-export default function AdminIssue({ issue: i, categoryName, categoryNames = {}, parties, regions = [], allIssues = [], links = [], onChanged }) {
+export default function AdminIssue({ issue: i, categoryName, categoryNames = {}, parties, regions = [], allIssues = [], links = [], onChanged, selectable = false, selected = false, onToggle }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [partyId, setPartyId] = useState(i.party_id ?? '');
@@ -137,7 +137,12 @@ export default function AdminIssue({ issue: i, categoryName, categoryNames = {},
     rpc('admin_log_contact', { p_issue: i.id, p_channel: channel, p_note: null, p_response: response }));
 
   return (
-    <li>
+    <li className={selectable ? 'selectable' : undefined}>
+      {selectable && (
+        <label className="pick">
+          <input type="checkbox" checked={selected} onChange={() => onToggle(i.id)} aria-label={`${A.bulk.select}: ${title}`} />
+        </label>
+      )}
       <details className="admin-card">
         <summary>
           <span className="chip">{s.statusLabels[i.status] ?? i.status}</span>{' '}

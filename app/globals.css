@@ -330,3 +330,16 @@ input[type=search]::-webkit-search-cancel-button { cursor:pointer; }
 .waitlist a { font-weight:700; min-width:0; overflow-wrap:anywhere; }
 .waitlist .days { font-weight:800; color:var(--ink); white-space:nowrap; }
 .pcard details { border-top:1px solid var(--line); padding-top:.6rem; } .pcard details summary { font-weight:700; cursor:pointer; min-height:44px; display:flex; align-items:center; }
+
+/* Moderator tools: tick boxes, the bulk bar, and the activity record */
+.cards > li.selectable { display:grid; grid-template-columns:auto minmax(0,1fr); gap:.25rem .5rem; align-items:start; }
+.pick { display:flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; margin:0; cursor:pointer; }
+.pick input { width:24px; height:24px; margin:0; }
+.bulkbar { background:var(--surface); box-shadow:0 0 0 2px var(--line), 0 6px 16px rgba(0,0,0,.18); border-radius:12px; padding:.75rem 1rem; margin:0 0 1rem; display:grid; grid-template-columns:minmax(0,1fr); gap:.5rem; }
+.bulkbar select, .bulkbar input[type=search] { max-width:100%; }
+.bulk-why { margin:.25rem 0 0; padding-left:1.2rem; }
+.linkish { background:none; box-shadow:none; color:inherit; text-decoration:underline; min-height:44px; padding:0 .5rem; }
+.inline-check { display:inline-flex; align-items:center; gap:.5rem; min-height:44px; }
+.activity { list-style:none; margin:0; padding:0; display:grid; grid-template-columns:minmax(0,1fr); gap:.5rem; }
+.activity li { background:var(--surface); box-shadow:inset 0 0 0 2px var(--line); border-radius:10px; padding:.6rem .8rem; }
+.activity p { margin:.1rem 0; overflow-wrap:anywhere; }

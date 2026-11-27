@@ -10,6 +10,9 @@ import PromiseStats from '@/components/PromiseStats';
 import AdminSuggestion from '@/components/AdminSuggestion';
 import AdminOfficeStaff from '@/components/AdminOfficeStaff';
 import AdminFollowUp from '@/components/AdminFollowUp';
+import AdminActivity from '@/components/AdminActivity';
+import AdminBulkBar from '@/components/AdminBulkBar';
+import { BULK_MAX, keepVisible, selectShown, toggleId } from '@/lib/moderatorTools';
 import { followUpList } from '@/lib/followUp';
 import { isDisputed, mergeFixChecks } from '@/lib/adminFix';
 
@@ -108,6 +111,9 @@ export default function AdminPage() {
   const [queue, setQueue] = useState([]);
   const [regions, setRegions] = useState([]);
   const [view, setView] = useState('needs');
+  const [picked, setPicked] = useState([]);       // ticked reports for the bulk bar
+  const [pickNote, setPickNote] = useState('');
+  const [myId, setMyId] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -116,6 +122,7 @@ export default function AdminPage() {
   }, []);
 
   const signedIn = session && !session.user.is_anonymous;
+  useEffect(() => { setMyId(session?.user?.id ?? null); }, [session]);
 
   const refresh = useCallback(async () => {
     const [i, c, p, r, l, sg, fx, fq] = await Promise.all([
@@ -159,6 +166,13 @@ export default function AdminPage() {
     [issues, view]
   );
 
+  // Ticks only make sense for what is on screen: drop any that left the list (changed status, other tab, refresh).
+  const pickedNow = useMemo(() => keepVisible(picked, shown), [picked, shown]);
+  const togglePick = (id) => { const r = toggleId(pickedNow, id); setPicked(r.ids); setPickNote(r.full ? A.bulk.limit(BULK_MAX) : ''); };
+  const pickAll = () => { const r = selectShown(shown); setPicked(r.ids); setPickNote(r.cut ? A.bulk.cut(r.cut, BULK_MAX) : ''); };
+  const clearPicks = () => { setPicked([]); setPickNote(''); };
+  const pickedSet = new Set(pickedNow);
+
   return (
     <main className="wrap wide">
       <h1 className="page-title">{A.title}</h1>
@@ -177,10 +191,9 @@ export default function AdminPage() {
       {signedIn && role === 'yes' && (
         <>
           <div className="tabs" role="tablist">
-            {[...Object.keys(VIEWS), 'followup', 'promises', 'directory', 'staff'].map((k) => (
-
+            {[...Object.keys(VIEWS), 'followup', 'promises', 'directory', 'staff', 'activity'].map((k) => (
               <button key={k} type="button" role="tab" aria-selected={view === k}
-                className={view === k ? 'tab on' : 'tab'} onClick={() => setView(k)}>
+                className={view === k ? 'tab on' : 'tab'} onClick={() => { setView(k); clearPicks(); }}>
                 {A.views[k]}{counts[k] === undefined ? '' : ` (${counts[k]})`}
               </button>
             ))}
@@ -190,7 +203,8 @@ export default function AdminPage() {
             <PromiseStats rows={issues} names={Object.fromEntries(parties.map((x) => [x.id, x.name]))} />
           ) : view === 'followup' ? (
             <AdminFollowUp rows={queue} categoryNames={catName} parties={parties} onChanged={refresh} />
-
+          ) : view === 'activity' ? (
+            <AdminActivity parties={parties} categoryNames={catName} myId={myId} />
           ) : view === 'staff' ? (
             <AdminOfficeStaff parties={parties} />
           ) : view === 'directory' ? (
@@ -205,9 +219,18 @@ export default function AdminPage() {
           ) : (
             <>
           {shown.length === 0 && <p>{A.none}</p>}
+          {shown.length > 1 && (
+            <p className="cta-row">
+              <button type="button" className="secondary" onClick={pickAll}>{A.bulk.selectAll}</button>
+            </p>
+          )}
+          {pickNote && <p className="hint" role="status">{pickNote}</p>}
+          {pickedNow.length > 0 && (
+            <AdminBulkBar ids={pickedNow} parties={parties} onClear={clearPicks} onKeep={setPicked} onChanged={refresh} />
+          )}
           <ul className="cards">
             {shown.map((i) => (
-              <AdminIssue key={i.id} issue={i} categoryName={catName[i.category_id] ?? ''} categoryNames={catName} parties={parties} regions={regions} allIssues={issues} links={links} onChanged={refresh} />
+              <AdminIssue key={i.id} issue={i} selectable selected={pickedSet.has(i.id)} onToggle={togglePick} categoryName={catName[i.category_id] ?? ''} categoryNames={catName} parties={parties} regions={regions} allIssues={issues} links={links} onChanged={refresh} />
             ))}
           </ul>
             </>
